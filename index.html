@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+    />
+    <title>Cyberpunk Platformer</title>
+    <link rel="stylesheet" href="style.css?v=1.120.208" />
+  </head>
+  <body>
+    <!-- Экран предзагрузки ассетов (Preloader) -->
+    <div
+      id="loading-screen"
+      style="
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        background: #0d0f18;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        z-index: 999999;
+        color: #00f0ff;
+        font-family: 'Courier New', monospace;
+      "
+    >
+      <h2 style="margin-bottom: 20px; letter-spacing: 2px; text-shadow: 0 0 10px #00f0ff;">
+        CYBERPUNK RUNNER
+      </h2>
+      <div
+        style="
+          width: 280px;
+          height: 16px;
+          border: 2px solid #00f0ff;
+          border-radius: 8px;
+          padding: 2px;
+          box-shadow: 0 0 15px rgba(0, 240, 255, 0.3);
+        "
+      >
+        <div
+          id="loader-fill"
+          style="
+            width: 0%;
+            height: 100%;
+            background: #ec4899;
+            border-radius: 4px;
+            transition: width 0.2s;
+          "
+        ></div>
+      </div>
+      <div id="loader-text" style="margin-top: 12px; font-size: 14px; color: #aaa;">
+        Инициализация систем... 0%
+      </div>
+    </div>
+
+    <!-- Основной игровой контейнер -->
+    <div id="game-container">
+      <!-- Верхний HUD -->
+      <div id="hud">
+        <div class="hud-item">SCORE: <span id="score">000350</span></div>
+        <div class="hud-item">HP: <span id="hp">♥♥♥</span></div>
+      </div>
+      
+      <!-- Игровой холст -->
+      <canvas id="gameCanvas"></canvas>
+    </div>
+
+    <!-- Меню выбора персонажа -->
+    <div
+      id="character-select"
+      style="
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(15, 23, 42, 0.95);
+        display: none;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        z-index: 10000;
+        font-family: monospace;
+        color: #38bdf8;
+      "
+    >
+      <h1 style="text-shadow: 0 0 10px #38bdf8; margin-bottom: 30px;">CHOOSE YOUR HERO</h1>
+      <div style="display: flex; gap: 20px;">
+        <button
+          class="char-btn"
+          data-char="Alisa"
+          style="
+            background: #1e293b;
+            border: 2px solid #38bdf8;
+            color: #fff;
+            padding: 15px 25px;
+            cursor: pointer;
+            font-size: 18px;
+            border-radius: 8px;
+          "
+        >
+          Alisa
+        </button>
+        <button
+          class="char-btn"
+          data-char="Chebur"
+          style="
+            background: #1e293b;
+            border: 2px solid #38bdf8;
+            color: #fff;
+            padding: 15px 25px;
+            cursor: pointer;
+            font-size: 18px;
+            border-radius: 8px;
+          "
+        >
+          Chebur
+        </button>
+        <button
+          class="char-btn"
+          data-char="Nancy"
+          style="
+            background: #1e293b;
+            border: 2px solid #38bdf8;
+            color: #fff;
+            padding: 15px 25px;
+            cursor: pointer;
+            font-size: 18px;
+            border-radius: 8px;
+          "
+        >
+          Nancy
+        </button>
+      </div>
+    </div>
+
+    <!-- Оверлей активации Fullscreen и первого тапа -->
+    <div
+      id="overlay-fullscreen"
+      style="
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        z-index: 9999;
+        background: rgba(3, 7, 18, 0.85);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        cursor: pointer;
+      "
+    >
+      <div
+        style="
+          color: #00ffcc;
+          font-family: 'Courier New', monospace;
+          font-size: 20px;
+          text-align: center;
+          text-shadow: 0 0 10px #00ffcc;
+          border: 2px solid #00ffcc;
+          padding: 20px;
+          border-radius: 8px;
+        "
+      >
+        [ НАЖМИТЕ ДЛЯ СТАРТА ]<br />
+        <span style="font-size: 12px; color: #38bdf8">Активация кибер-модуля и Fullscreen</span>
+      </div>
+    </div>
+
+    <script type="module" src="js/main.js?v=1.120.208"></script>
+  </body>
+</html>

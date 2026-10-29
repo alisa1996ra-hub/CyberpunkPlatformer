@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Cyberpunk Platformer</title>
+    <link rel="stylesheet" href="style.css" ?v="1.120.14269" />
+  </head>
+  <body>
+    <!-- Внешний контейнер-рамка с фиксацией пропорций -->
+    <div id="game-container">
+      <!-- 1. ВЕРХНИЙ БАР (HUD): Находится строго первым в потоке -->
+      <div id="ui-layer">
+        <div class="ui-element score-board">
+          <span class="label">SCORE:</span>
+          <span id="score-val">000000</span>
+        </div>
+
+        <div class="ui-element health-board">
+          <span class="label">HP:</span>
+          <span id="hp-val">❤❤❤</span>
+        </div>
+      </div>
+
+      <!-- 2. ХОЛСТ: Занимает ВСЁ оставшееся под HUD место -->
+      <canvas id="gameCanvas" width="1280" height="640"></canvas>
+    </div>
+
+    <script type="module" src="js/main.js" ?v="1.120.14269"></script>
+  </body>
+</html>
