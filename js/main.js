@@ -1265,6 +1265,22 @@ function setupMobileControls() {
         el.addEventListener('touchcancel', handleEnd, { passive: false });
     };
 
+    const forceJump = () => {
+        if (!gameStarted || !player) return;
+        if (typeof player.jump === 'function') {
+            player.jump();
+        }
+        const vyNow = player.vy ?? player.velocityY ?? 0;
+        if (vyNow >= 0) {
+            const jumpImpulse = player.jumpForce ?? player.jumpPower ?? player.jumpSpeed ?? -11;
+            const targetVy = jumpImpulse < 0 ? jumpImpulse : -Math.abs(jumpImpulse || 11);
+            if (typeof player.vy === 'number') player.vy = targetVy;
+            if (typeof player.velocityY === 'number') player.velocityY = targetVy;
+            player.onGround = false;
+            player.isGrounded = false;
+        }
+    };
+
     const tryMobilePickupOrAttack = () => {
         if (!gameStarted || !player) return;
 
@@ -1300,6 +1316,8 @@ function setupMobileControls() {
 
         if (typeof player.triggerAttack === 'function') {
             player.triggerAttack(projectileManager, getWorldObjects());
+        } else if (typeof player.attack === 'function') {
+            player.attack(projectileManager, getWorldObjects());
         }
     };
 
@@ -1331,12 +1349,7 @@ function setupMobileControls() {
         }
     );
 
-    attachPress('btn-jump', () => {
-        if (gameStarted && player && typeof player.jump === 'function') {
-            player.jump();
-        }
-    });
-
+    attachPress('btn-jump', forceJump);
     attachPress('btn-attack', tryMobilePickupOrAttack);
     attachPress('btn-repair', () => {
         if (gameStarted) handleEngineeringInteract();
@@ -1583,13 +1596,21 @@ function init() {
 }
 
 function handleInput() {
-    if (!player) return;
+    if (!player || !gameStarted) return;
 
     if (keys['ArrowLeft'] || keys['KeyA']) {
-        player.moveLeft();
+        player.facingLeft = true;
+        if (typeof player.moveLeft === 'function') player.moveLeft();
+        const speed = Math.abs(player.speed ?? player.moveSpeed ?? 4) || 4;
+        if (typeof player.vx === 'number') player.vx = -speed;
+        if (typeof player.velocityX === 'number') player.velocityX = -speed;
     } else if (keys['ArrowRight'] || keys['KeyD']) {
-        player.moveRight();
-    } else {
+        player.facingLeft = false;
+        if (typeof player.moveRight === 'function') player.moveRight();
+        const speed = Math.abs(player.speed ?? player.moveSpeed ?? 4) || 4;
+        if (typeof player.vx === 'number') player.vx = speed;
+        if (typeof player.velocityX === 'number') player.velocityX = speed;
+    } else if (typeof player.stop === 'function') {
         player.stop();
     }
 }
