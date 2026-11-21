@@ -1196,7 +1196,6 @@ window.addEventListener('keydown', onWindowKeyDown);
 window.addEventListener('keyup', onWindowKeyUp);
 
 function setupMobileControls() {
-    if (!('ontouchstart' in window || navigator.maxTouchPoints > 0)) return;
     if (document.getElementById('mobile-controls')) return;
 
     const mobileContainer = document.createElement('div');
@@ -1207,8 +1206,9 @@ function setupMobileControls() {
         <div id="btn-right" style="width:65px; height:65px; background:rgba(56,189,248,0.27); border:2px solid #38bdf8; border-radius:50%; color:#fff; font-size:24px; display:flex; align-items:center; justify-content:center; user-select:none; -webkit-user-select:none; touch-action:none;">▶</div>
       </div>
       <div style="display:flex; gap:12px; pointer-events:auto;">
+        <div id="btn-bag" style="width:55px; height:55px; background:rgba(0,255,204,0.22); border:2px solid #00ffcc; border-radius:50%; color:#00ffcc; font-size:20px; display:flex; align-items:center; justify-content:center; user-select:none; -webkit-user-select:none; touch-action:none;">🎒</div>
         <div id="btn-repair" style="width:55px; height:55px; background:rgba(251,191,36,0.25); border:2px solid #fbbf24; border-radius:50%; color:#fbbf24; font-size:20px; display:flex; align-items:center; justify-content:center; user-select:none; -webkit-user-select:none; touch-action:none;">🔧</div>
-        <div id="btn-turbo" style="width:55px; height:55px; background:rgba(15,23,42,0.6); border:2px solid #64748b; border-radius:50%; color:#64748b; font-size:20px; display:flex; align-items:center; justify-content:center; user-select:none; -webkit-user-select:none; touch-action:none; opacity:0.6;">⚡</div>
+        <div id="btn-turbo" style="width:55px; height:55px; background:rgba(15,23,42,0.6); border:2px solid #64748b; border-radius:50%; color:#64748b; font-size:20px; display:flex; align-items:center; justify-content:center; user-select:none; -webkit-user-select:none; touch-action:none; opacity:0.85;">⚡</div>
         <div id="btn-attack" style="width:65px; height:65px; background:rgba(236,72,153,0.3); border:2px solid #ec4899; border-radius:50%; color:#fff; font-size:24px; display:flex; align-items:center; justify-content:center; user-select:none; -webkit-user-select:none; touch-action:none;">👊</div>
         <div id="btn-jump" style="width:65px; height:65px; background:rgba(56,189,248,0.3); border:2px solid #38bdf8; border-radius:50%; color:#fff; font-size:24px; display:flex; align-items:center; justify-content:center; user-select:none; -webkit-user-select:none; touch-action:none;">▲</div>
       </div>
@@ -1229,26 +1229,125 @@ function setupMobileControls() {
 
     document.body.appendChild(mobileContainer);
 
-    const attachTouch = (id, onPress, onRelease) => {
+    const attachPress = (id, onPress, onRelease) => {
         const el = document.getElementById(id);
         if (!el) return;
 
-        el.addEventListener('touchstart', (e) => { e.preventDefault(); onPress(); }, { passive: false });
-        el.addEventListener('touchend', (e) => { e.preventDefault(); if (onRelease) onRelease(); }, { passive: false });
-        el.addEventListener('touchcancel', (e) => { e.preventDefault(); if (onRelease) onRelease(); }, { passive: false });
+        let active = false;
+
+        const handleStart = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (active) return;
+            active = true;
+            el.style.transform = 'scale(0.92)';
+            if (onPress) onPress();
+        };
+
+        const handleEnd = (e) => {
+            if (e) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+            if (!active) return;
+            active = false;
+            el.style.transform = 'scale(1)';
+            if (onRelease) onRelease();
+        };
+
+        el.addEventListener('pointerdown', handleStart, { passive: false });
+        el.addEventListener('pointerup', handleEnd, { passive: false });
+        el.addEventListener('pointercancel', handleEnd, { passive: false });
+        el.addEventListener('pointerleave', handleEnd, { passive: false });
+
+        el.addEventListener('touchstart', handleStart, { passive: false });
+        el.addEventListener('touchend', handleEnd, { passive: false });
+        el.addEventListener('touchcancel', handleEnd, { passive: false });
     };
 
-    attachTouch('btn-left',  () => { keys['ArrowLeft'] = true; },  () => { keys['ArrowLeft'] = false; });
-    attachTouch('btn-right', () => { keys['ArrowRight'] = true; }, () => { keys['ArrowRight'] = false; });
-    attachTouch('btn-jump',  () => { if (player) player.jump(); });
-    attachTouch('btn-repair', () => { handleEngineeringInteract(); });
-    attachTouch('btn-attack', () => {
-        if (player && currentLevelData) {
+    const tryMobilePickupOrAttack = () => {
+        if (!gameStarted || !player) return;
+
+        const now = performance.now();
+        if ((now - lastPickupTime) >= 140 && currentLevelData && Array.isArray(currentLevelData.collectibles)) {
+            const pCenterX = player.x + (player.width || 32) / 2;
+            const pCenterY = getSafePlayerY(player) + (player.height || 32) / 2;
+
+            let nearestItem = null;
+            let bestDist = 110;
+
+            for (const item of currentLevelData.collectibles) {
+                if (!item || item.isCollected) continue;
+                const itemCenterX = item.x + (item.width || 32) / 2;
+                const itemCenterY = item.y + (item.height || 32) / 2;
+                const d = Math.hypot(pCenterX - itemCenterX, pCenterY - itemCenterY);
+                if (d < bestDist) {
+                    bestDist = d;
+                    nearestItem = item;
+                }
+            }
+
+            if (nearestItem && typeof nearestItem.collect === 'function') {
+                lastPickupTime = now;
+                const pickedOk = nearestItem.collect(player);
+                if (pickedOk || nearestItem.isCollected) {
+                    nearestItem.isCollected = true;
+                    currentLevelData.collectibles = currentLevelData.collectibles.filter(c => c !== nearestItem && !c.isCollected);
+                }
+                return;
+            }
+        }
+
+        if (typeof player.triggerAttack === 'function') {
             player.triggerAttack(projectileManager, getWorldObjects());
         }
+    };
+
+    attachPress(
+        'btn-left',
+        () => {
+            keys['ArrowLeft'] = true;
+            if (player && typeof player.moveLeft === 'function') player.moveLeft();
+        },
+        () => {
+            keys['ArrowLeft'] = false;
+            if (!keys['ArrowRight'] && !keys['KeyD'] && player && typeof player.stop === 'function') {
+                player.stop();
+            }
+        }
+    );
+
+    attachPress(
+        'btn-right',
+        () => {
+            keys['ArrowRight'] = true;
+            if (player && typeof player.moveRight === 'function') player.moveRight();
+        },
+        () => {
+            keys['ArrowRight'] = false;
+            if (!keys['ArrowLeft'] && !keys['KeyA'] && player && typeof player.stop === 'function') {
+                player.stop();
+            }
+        }
+    );
+
+    attachPress('btn-jump', () => {
+        if (gameStarted && player && typeof player.jump === 'function') {
+            player.jump();
+        }
     });
-    attachTouch('btn-turbo', () => {
-        if (player) player.toggleTurbo();
+
+    attachPress('btn-attack', tryMobilePickupOrAttack);
+    attachPress('btn-repair', () => {
+        if (gameStarted) handleEngineeringInteract();
+    });
+    attachPress('btn-turbo', () => {
+        if (gameStarted && player && typeof player.toggleTurbo === 'function') {
+            player.toggleTurbo();
+        }
+    });
+    attachPress('btn-bag', () => {
+        if (gameStarted) toggleBackpackUI();
     });
 }
 
