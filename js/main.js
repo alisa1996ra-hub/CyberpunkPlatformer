@@ -1236,8 +1236,7 @@ function setupMobileControls() {
         let active = false;
 
         const handleStart = (e) => {
-            e.preventDefault();
-            e.stopPropagation();
+            if (e && e.cancelable) e.preventDefault();
             if (active) return;
             active = true;
             el.style.transform = 'scale(0.92)';
@@ -1245,44 +1244,21 @@ function setupMobileControls() {
         };
 
         const handleEnd = (e) => {
-            if (e) {
-                e.preventDefault();
-                e.stopPropagation();
-            }
+            if (e && e.cancelable) e.preventDefault();
             if (!active) return;
             active = false;
             el.style.transform = 'scale(1)';
             if (onRelease) onRelease();
         };
 
-        el.addEventListener('pointerdown', handleStart, { passive: false });
-        el.addEventListener('pointerup', handleEnd, { passive: false });
-        el.addEventListener('pointercancel', handleEnd, { passive: false });
-        el.addEventListener('pointerleave', handleEnd, { passive: false });
-
-        el.addEventListener('touchstart', handleStart, { passive: false });
-        el.addEventListener('touchend', handleEnd, { passive: false });
-        el.addEventListener('touchcancel', handleEnd, { passive: false });
-    };
-
-    const forceJump = () => {
-        if (!gameStarted || !player) return;
-        if (typeof player.jump === 'function') {
-            player.jump();
-        }
-        const vyNow = player.vy ?? player.velocityY ?? 0;
-        if (vyNow >= 0) {
-            const jumpImpulse = player.jumpForce ?? player.jumpPower ?? player.jumpSpeed ?? -11;
-            const targetVy = jumpImpulse < 0 ? jumpImpulse : -Math.abs(jumpImpulse || 11);
-            if (typeof player.vy === 'number') player.vy = targetVy;
-            if (typeof player.velocityY === 'number') player.velocityY = targetVy;
-            player.onGround = false;
-            player.isGrounded = false;
-        }
+        el.addEventListener('pointerdown', handleStart);
+        el.addEventListener('pointerup', handleEnd);
+        el.addEventListener('pointercancel', handleEnd);
+        el.addEventListener('pointerleave', handleEnd);
     };
 
     const tryMobilePickupOrAttack = () => {
-        if (!gameStarted || !player) return;
+        if (!player) return;
 
         const now = performance.now();
         if ((now - lastPickupTime) >= 140 && currentLevelData && Array.isArray(currentLevelData.collectibles)) {
@@ -1316,8 +1292,6 @@ function setupMobileControls() {
 
         if (typeof player.triggerAttack === 'function') {
             player.triggerAttack(projectileManager, getWorldObjects());
-        } else if (typeof player.attack === 'function') {
-            player.attack(projectileManager, getWorldObjects());
         }
     };
 
@@ -1325,12 +1299,17 @@ function setupMobileControls() {
         'btn-left',
         () => {
             keys['ArrowLeft'] = true;
-            if (player && typeof player.moveLeft === 'function') player.moveLeft();
+            if (player) {
+                player.facingRight = false;
+                player.vx = -(player.speed || 4.5);
+                if (typeof player.moveLeft === 'function') player.moveLeft();
+            }
         },
         () => {
             keys['ArrowLeft'] = false;
-            if (!keys['ArrowRight'] && !keys['KeyD'] && player && typeof player.stop === 'function') {
-                player.stop();
+            if (!keys['ArrowRight'] && !keys['KeyD'] && player) {
+                player.vx = 0;
+                if (typeof player.stop === 'function') player.stop();
             }
         }
     );
@@ -1339,28 +1318,41 @@ function setupMobileControls() {
         'btn-right',
         () => {
             keys['ArrowRight'] = true;
-            if (player && typeof player.moveRight === 'function') player.moveRight();
+            if (player) {
+                player.facingRight = true;
+                player.vx = player.speed || 4.5;
+                if (typeof player.moveRight === 'function') player.moveRight();
+            }
         },
         () => {
             keys['ArrowRight'] = false;
-            if (!keys['ArrowLeft'] && !keys['KeyA'] && player && typeof player.stop === 'function') {
-                player.stop();
+            if (!keys['ArrowLeft'] && !keys['KeyA'] && player) {
+                player.vx = 0;
+                if (typeof player.stop === 'function') player.stop();
             }
         }
     );
 
-    attachPress('btn-jump', forceJump);
+    attachPress('btn-jump', () => {
+        if (!player) return;
+        if (typeof player.jump === 'function') player.jump();
+        if (player.isGrounded && !player.isAttacking) {
+            player.vy = player.jumpForce ?? -11;
+            player.isGrounded = false;
+        }
+    });
+
     attachPress('btn-attack', tryMobilePickupOrAttack);
     attachPress('btn-repair', () => {
-        if (gameStarted) handleEngineeringInteract();
+        handleEngineeringInteract();
     });
     attachPress('btn-turbo', () => {
-        if (gameStarted && player && typeof player.toggleTurbo === 'function') {
+        if (player && typeof player.toggleTurbo === 'function') {
             player.toggleTurbo();
         }
     });
     attachPress('btn-bag', () => {
-        if (gameStarted) toggleBackpackUI();
+        toggleBackpackUI();
     });
 }
 
