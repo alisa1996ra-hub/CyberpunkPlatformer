@@ -20,19 +20,38 @@ export class ProjectileManager {
       });
     } else {
       const duration = data.type === 'whip' ? 28 : 15; 
-      this.effects.push({
+      const newEffect = {
         player: data.playerRef,
         config: data.config,
         type: data.type,
         life: duration,
         maxLife: duration,
-        facingRight: data.facingRight
-      });
+        facingRight: data.facingRight,
+        damagedBarrels: new Set() // Чтобы не наносить урон одной и той же бочке многократно за один удар
+      };
+
+      this.effects.push(newEffect);
+
+      // ⚡ ПЕРЕХВАТ УДАРА по столбам ЛЭП в момент спавна
+      if (data.playerRef && window.currentLevelData && window.currentLevelData.poles) {
+        const p = data.playerRef;
+        const attackRange = data.type === 'tesla' ? 260 : 210;
+        const attackX = p.x + (data.facingRight ? p.width : 0);
+        const minX = Math.min(attackX, attackX + (data.facingRight ? attackRange : -attackRange));
+        const maxX = Math.max(attackX, attackX + (data.facingRight ? attackRange : -attackRange));
+
+        window.currentLevelData.poles.forEach(pole => {
+          if (pole.x >= minX - 30 && pole.x <= maxX + 30) {
+            pole.takeDamage(1);
+            if (window.triggerScreenShake) window.triggerScreenShake(4, 15);
+          }
+        });
+      }
     }
   }
 
   update() {
-    // Обновляем апельсины Чебура
+    // 1. Обновляем апельсины Чебура
     for (let i = this.projectiles.length - 1; i >= 0; i--) {
       const p = this.projectiles[i];
       p.x += p.vx;
@@ -40,19 +59,103 @@ export class ProjectileManager {
       p.vy += p.gravity;
       p.travelled += Math.abs(p.vx);
 
+      // Проверка попадания апельсина по столбам
+      if (window.currentLevelData && window.currentLevelData.poles) {
+        window.currentLevelData.poles.forEach(pole => {
+          const poleTopY = pole.groundY - pole.height;
+          if (p.x >= pole.x - 20 && p.x <= pole.x + 20 && p.y >= poleTopY && p.y <= pole.groundY) {
+            pole.takeDamage(1);
+            p.travelled = p.maxDist;
+            if (window.triggerScreenShake) window.triggerScreenShake(4, 15);
+          }
+        });
+      }
+
+      // Проверка попадания апельсина по бочкам
+      if (window.currentLevelData && window.currentLevelData.barrels) {
+        const pBox = { x: p.x - 6, y: p.y - 6, width: 12, height: 12 };
+        window.currentLevelData.barrels.forEach(barrel => {
+          if (!barrel.isDestroyed && this.rectIntersect(pBox, barrel.getHitbox())) {
+            barrel.takeDamage(30, p.x);
+            p.travelled = p.maxDist; // Уничтожаем снаряд
+            if (window.triggerScreenShake) window.triggerScreenShake(3, 10);
+          }
+        });
+      }
+
       if (p.travelled >= p.maxDist || p.y > 2000) {
         this.projectiles.splice(i, 1);
       }
     }
 
-    // Обновляем визуальные эффекты
+    // 2. Обновляем визуальные эффекты и проверяем урон от ударов ближнего боя (Тесла / Цепь)
     for (let i = this.effects.length - 1; i >= 0; i--) {
       const eff = this.effects[i];
       eff.life--;
+
+      // 🔌 ПЕРЕХВАТ УДАРА по силовым кабелям
+      if (eff.player && window.currentLevelData && window.currentLevelData.cables) {
+        const p = eff.player;
+        const dir = eff.facingRight ? 1 : -1;
+        const attackRange = eff.type === 'tesla' ? 260 : 210;
+        const startX = p.x + (eff.facingRight ? p.width : 0);
+
+        const attackHitbox = {
+          x: eff.facingRight ? startX : startX - attackRange,
+          y: p.y - 40,
+          width: attackRange,
+          height: p.height + 60
+        };
+
+        window.currentLevelData.cables.forEach(cable => {
+          if (!cable.isBroken && !eff.damagedCables?.has(cable)) {
+            if (this.rectIntersect(attackHitbox, cable.getHitbox())) {
+              cable.takeDamage(1);
+              if (!eff.damagedCables) eff.damagedCables = new Set();
+              eff.damagedCables.add(cable);
+              if (window.triggerScreenShake) window.triggerScreenShake(3, 10);
+            }
+          }
+        });
+      }
+
+      // Проверяем коллизию атак с бочками во время активной фазы удара
+      if (eff.player && window.currentLevelData && window.currentLevelData.barrels) {
+        const p = eff.player;
+        const dir = eff.facingRight ? 1 : -1;
+        const attackRange = eff.type === 'tesla' ? 260 : 210;
+        const startX = p.x + (eff.facingRight ? p.width : 0);
+
+        const attackHitbox = {
+          x: eff.facingRight ? startX : startX - attackRange,
+          y: p.y - 10,
+          width: attackRange,
+          height: p.height + 20
+        };
+
+        window.currentLevelData.barrels.forEach(barrel => {
+          if (!barrel.isDestroyed && !eff.damagedBarrels.has(barrel)) {
+            if (this.rectIntersect(attackHitbox, barrel.getHitbox())) {
+              barrel.takeDamage(30, p.x + p.width / 2);
+              eff.damagedBarrels.add(barrel); // Фиксируем, что эта бочка уже получила урон от текущего удара
+              if (window.triggerScreenShake) window.triggerScreenShake(3, 10);
+            }
+          }
+        });
+      }
+
       if (eff.life <= 0) {
         this.effects.splice(i, 1);
       }
     }
+  }
+
+  // Вспомогательный метод для пересечения AABB хитбоксов
+  rectIntersect(r1, r2) {
+    return !(r2.x > r1.x + r1.width ||
+             r2.x + r2.width < r1.x ||
+             r2.y > r1.y + r1.height ||
+             r2.y + r2.height < r1.y);
   }
 
   draw(ctx) {
@@ -119,7 +222,6 @@ export class ProjectileManager {
         const floorFall = progress * 45; 
         const anchorY = startY + arcHeight + floorFall;
 
-        // Рисуем цепь по точкам (звенья + кольца)
         ctx.strokeStyle = eff.config.color;
         ctx.fillStyle = eff.config.color;
         ctx.lineWidth = 2;
@@ -130,17 +232,14 @@ export class ProjectileManager {
 
         for (let i = 1; i <= chainSteps; i++) {
           const t = i / chainSteps;
-          // Параболическая интерполяция для дуги цепи
           const cx = startX + (anchorX - startX) * t;
           const cy = startY + (anchorY - startY) * t + Math.sin(t * Math.PI) * (-40);
 
-          // Рисуем перемычку цепи
           ctx.beginPath();
           ctx.moveTo(prevX, prevY);
           ctx.lineTo(cx, cy);
           ctx.stroke();
 
-          // Рисуем кольцо цепи в узловых точках
           ctx.beginPath();
           ctx.ellipse(cx, cy, 4, 2, t * Math.PI, 0, Math.PI * 2);
           ctx.fill();
@@ -149,7 +248,6 @@ export class ProjectileManager {
           prevY = cy;
         }
 
-        // Оборванный хвост цепи, летящий позади якоря (эффект инерции)
         ctx.strokeStyle = eff.config.secondaryColor;
         ctx.lineWidth = 2.5;
         ctx.beginPath();
@@ -157,7 +255,6 @@ export class ProjectileManager {
         ctx.lineTo(anchorX - dir * 25, anchorY - 12);
         ctx.stroke();
 
-        // Крупный детализированный якорь
         ctx.save();
         ctx.translate(anchorX, anchorY);
         const angle = (progress * Math.PI * 1.2) * dir;
@@ -167,22 +264,18 @@ export class ProjectileManager {
         ctx.strokeStyle = eff.config.secondaryColor;
         ctx.lineWidth = 2.5;
 
-        // Кольцо якоря
         ctx.beginPath();
         ctx.arc(0, -22, 7, 0, Math.PI * 2);
         ctx.stroke();
 
-        // Веретено и шток
         ctx.fillRect(-3, -16, 6, 32);   
         ctx.fillRect(-14, -10, 28, 4);  
 
-        // Рога якоря
         ctx.beginPath();
         ctx.arc(0, -2, 20, 0.2 * Math.PI, 0.8 * Math.PI, false);
         ctx.lineWidth = 6;
         ctx.stroke();
 
-        // Левая лапа
         ctx.beginPath();
         ctx.moveTo(-17, 10);
         ctx.lineTo(-24, 4);
@@ -190,7 +283,6 @@ export class ProjectileManager {
         ctx.closePath();
         ctx.fill();
 
-        // Правая лапа
         ctx.beginPath();
         ctx.moveTo(17, 10);
         ctx.lineTo(24, 4);
@@ -198,7 +290,6 @@ export class ProjectileManager {
         ctx.closePath();
         ctx.fill();
 
-        // Блик
         ctx.fillStyle = '#ffffff';
         ctx.beginPath();
         ctx.arc(0, 2, 4, 0, Math.PI * 2);

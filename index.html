@@ -7,7 +7,47 @@
       content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
     />
     <title>Cyberpunk Platformer</title>
-    <link rel="stylesheet" href="style.css?v=1.120.208" />
+    <style>
+      * {
+          box-sizing: border-box;
+          user-select: none;
+          -webkit-user-select: none;
+      }
+
+      html, body {
+          margin: 0;
+          padding: 0;
+          width: 100vw;
+          height: 100vh;
+          background-color: #090a0f;
+          overflow: hidden;
+          display: flex;
+          justify-content: center;
+          align-items: center;
+      }
+
+      /* Контейнер рамки, сохраняющий пропорции и отступы */
+      #game-container {
+    width: min(100%, 1280px);
+    height: auto;
+    max-height: calc(100vh - 24px);
+    aspect-ratio: 1280 / 580;
+    border: 2px solid #38bdf8;
+    border-radius: 12px;
+    box-shadow: 0 0.27px rgba(56, 189, 248, 0.4), 0 10px 30px rgba(0, 0, 0, 0.9);
+    background: #030712;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+      #gameCanvas {
+          flex: 1 1 auto; min-height: 0;
+          width: 100%;
+          height: 100%;
+          display: block;
+      }
+    </style>
   </head>
   <body>
     <!-- Экран предзагрузки ассетов (Preloader) -->
@@ -58,16 +98,9 @@
       </div>
     </div>
 
-    <!-- Основной игровой контейнер -->
+    <!-- Основной игровой холст внутри кибер-контейнера с рамкой -->
     <div id="game-container">
-      <!-- Верхний HUD -->
-      <div id="hud">
-        <div class="hud-item">SCORE: <span id="score">000350</span></div>
-        <div class="hud-item">HP: <span id="hp">♥♥♥</span></div>
-      </div>
-      
-      <!-- Игровой холст -->
-      <canvas id="gameCanvas"></canvas>
+        <canvas id="gameCanvas" width="1280" height="580"></canvas>
     </div>
 
     <!-- Меню выбора персонажа -->
@@ -138,6 +171,64 @@
         </button>
       </div>
     </div>
+    <!-- Модальное окно кибер-магазина -->
+<div
+  id="shop-modal"
+  style="
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(3, 7, 18, 0.92);
+    display: none;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    z-index: 20000;
+    font-family: 'Courier New', monospace;
+    color: #38bdf8;
+  "
+>
+  <div
+    style="
+      width: 650px;
+      max-width: 90vw;
+      background: #090a0f;
+      border: 2px solid #00f0ff;
+      border-radius: 12px;
+      box-shadow: 0 0 25px rgba(0, 240, 255, 0.3);
+      padding: 25px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    "
+  >
+    <!-- Шапка магазина -->
+    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #1e293b; padding-bottom: 15px;">
+      <h2 style="margin: 0; color: #00f0ff; text-shadow: 0 0 10px #00f0ff; letter-spacing: 2px;">CYBER SHOP</h2>
+      <div style="font-size: 18px; color: #ec4899; text-shadow: 0 0 8px rgba(236,72,153,0.4);">
+        БАЛАНС: <span id="player-credits">1000</span> CR
+      </div>
+    </div>
+
+    <!-- Переключатель вкладок -->
+    <div style="display: flex; gap: 10px;">
+      <button id="tab-upgrades-btn" class="shop-tab-btn" style="background: #00f0ff; color: #030712; border: none; padding: 8px 15px; font-weight: bold; cursor: pointer; border-radius: 4px;">Улучшения</button>
+      <button id="tab-materials-btn" class="shop-tab-btn" style="background: #1e293b; color: #38bdf8; border: 1px solid #38bdf8; padding: 8px 15px; cursor: pointer; border-radius: 4px;">Материалы</button>
+    </div>
+
+    <!-- Контейнер для динамического списка товаров -->
+    <div id="shop-list-container" style="display: flex; flex-direction: column; gap: 12px; max-height: 320px; overflow-y: auto; padding-right: 5px;">
+      <!-- Сюда JavaScript будет автоматически рендерить апгрейды или материалы из shopConfig.js -->
+    </div>
+
+    <!-- Кнопка закрытия -->
+    <button id="close-shop-btn" style="background: transparent; border: 2px solid #38bdf8; color: #38bdf8; padding: 10px; font-family: monospace; font-size: 16px; font-weight: bold; border-radius: 6px; cursor: pointer; transition: 0.2s;">
+      [ ЗАКРЫТЬ ]
+    </button>
+  </div>
+</div>
 
     <!-- Оверлей активации Fullscreen и первого тапа -->
     <div
@@ -173,6 +264,6 @@
       </div>
     </div>
 
-    <script type="module" src="js/main.js?v=1.120.208"></script>
+    <script type="module" src="js/main.js?v=3.90"></script>
   </body>
 </html>

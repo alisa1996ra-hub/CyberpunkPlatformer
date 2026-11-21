@@ -1,7 +1,26 @@
-const canvas = document.getElementById("gameCanvas");
+document.addEventListener("DOMContentLoaded", () => {
+  const canvas = document.getElementById("gameCanvas");
+  if (!canvas) {
+    console.error("❌ Не найден элемент #gameCanvas в HTML!");
+    return;
+  }
 const ctx = canvas.getContext("2d");
 
 ctx.imageSmoothingEnabled = false;
+
+// 🎯 Функция адаптивного ресайза холста под любое окно / мобилку
+function resizeCanvas() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+  ctx.imageSmoothingEnabled = false;
+  
+  // Динамически пересчитываем позицию кнопок под правую/левую сторону экрана
+  touchControls.jumpBtn.x = canvas.width - 130;
+  touchControls.rightBtn.x = 150;
+  touchControls.leftBtn.x = 40;
+}
+
+window.addEventListener('resize', resizeCanvas);
 
 const TILE = 32;
 
@@ -18,7 +37,7 @@ let currentLevelData = {
   coins: [],
   hearts: [],
   finishLine: { x: 1800, y: 320, w: 32, h: 64 },
-  biome: "exclusion",
+  biome: "seaport", // По умолчанию ставим seaport для тестов графики
   isNight: false,
 };
 
@@ -37,17 +56,15 @@ const player = {
   h: 38,
   vx: 0,
   vy: 0,
-  speed: 4.5,
-  jumpForce: -13, // Увеличенная сила прыжка
-  gravity: 0.48, // Плавная гравитация
+  speed: 3.15,
+  jumpForce: -13,
+  gravity: 0.34,
   grounded: false,
 };
 
 const camera = { x: 0 };
-// Добавили флаг jump в объект управления
 const keys = { left: false, right: false, jump: false };
 
-// 🔍 Сюда вставляем переменные режима инспектора трассы:
 let freeCameraMode = {
   active: false,
   x: 0,
@@ -55,34 +72,34 @@ let freeCameraMode = {
   speed: 15,
 };
 
-// Сенсорное управление для мобилок
+// Сенсорное управление
 const touchControls = {
   leftBtn: { x: 40, y: 520, w: 90, h: 90, active: false },
   rightBtn: { x: 150, y: 520, w: 90, h: 90, active: false },
   jumpBtn: { x: 1150, y: 520, w: 90, h: 90, active: false },
 };
 
-// 1. ИСПРАВЛЕННЫЙ ОБРАБОТЧИК КЛАВИАТУРЫ (с e.preventDefault() для Пробела)
+resizeCanvas();
+
+// Обработчик клавиатуры
 window.addEventListener("keydown", (e) => {
   if (e.code === "Space" || e.code === "ArrowUp" || e.code === "KeyW") {
-    e.preventDefault(); // Запрещаем странице скроллиться от пробела
+    e.preventDefault();
     keys.jump = true;
   }
   if (e.code === "ArrowLeft" || e.code === "KeyA") keys.left = true;
   if (e.code === "ArrowRight" || e.code === "KeyD") keys.right = true;
-  // 🔍 Управление инспектором и уровнями:
+  
   if (e.code === "KeyM") {
     freeCameraMode.active = !freeCameraMode.active;
     freeCameraMode.x = camera.x;
     console.log("🔍 Режим инспектора:", freeCameraMode.active ? "ВКЛ" : "ВЫКЛ");
   }
   if (e.code === "BracketRight") {
-    // Клавиша ']' — следующий уровень
     gameStats.level++;
     loadLevel(gameStats.level);
   }
   if (e.code === "BracketLeft") {
-    // Клавиша '[' — предыдущий уровень
     gameStats.level = Math.max(1, gameStats.level - 1);
     loadLevel(gameStats.level);
   }
@@ -99,7 +116,6 @@ canvas.addEventListener("touchstart", handleTouch, { passive: false });
 canvas.addEventListener("touchmove", handleTouch, { passive: false });
 canvas.addEventListener("touchend", handleTouch, { passive: false });
 
-// 2. ИСПРАВЛЕННЫЙ СЕНСОРНЫЙ ОБРАБОТЧИК
 function handleTouch(e) {
   e.preventDefault();
   if (!document.fullscreenElement) {
@@ -113,72 +129,55 @@ function handleTouch(e) {
   touchControls.leftBtn.active = false;
   touchControls.rightBtn.active = false;
   touchControls.jumpBtn.active = false;
-  keys.jump = false; // Сбрасываем прыжок при отпускании
+  keys.jump = false;
 
   for (let i = 0; i < e.touches.length; i++) {
     const touchX = (e.touches[i].clientX - rect.left) * scaleX;
     const touchY = (e.touches[i].clientY - rect.top) * scaleY;
 
     let lb = touchControls.leftBtn;
-    if (
-      touchX >= lb.x &&
-      touchX <= lb.x + lb.w &&
-      touchY >= lb.y &&
-      touchY <= lb.y + lb.h
-    ) {
+    if (touchX >= lb.x && touchX <= lb.x + lb.w && touchY >= lb.y && touchY <= lb.y + lb.h) {
       touchControls.leftBtn.active = true;
     }
     let rb = touchControls.rightBtn;
-    if (
-      touchX >= rb.x &&
-      touchX <= rb.x + rb.w &&
-      touchY >= rb.y &&
-      touchY <= rb.y + rb.h
-    ) {
+    if (touchX >= rb.x && touchX <= rb.x + rb.w && touchY >= rb.y && touchY <= rb.y + rb.h) {
       touchControls.rightBtn.active = true;
     }
     let jb = touchControls.jumpBtn;
-    if (
-      touchX >= jb.x &&
-      touchX <= jb.x + jb.w &&
-      touchY >= jb.y &&
-      touchY <= jb.y + jb.h
-    ) {
+    if (touchX >= jb.x && touchX <= jb.x + jb.w && touchY >= jb.y && touchY <= jb.y + jb.h) {
       touchControls.jumpBtn.active = true;
-      keys.jump = true; // Активируем прыжок от сенсора
+      keys.jump = true;
     }
   }
 }
 
+// Загрузка уровня через процедурный генератор (длинная трасса)
 function loadLevel(lvlNum) {
   const generated = generateLevelData(lvlNum);
 
   currentLevelData.grid = generated.grid;
   currentLevelData.isLockdown = generated.isLockdown;
   currentLevelData.isStation = generated.isStation;
-
-  let biomeIndex = Math.floor((lvlNum - 1) / 5) % biomesAvailable.length;
-  currentLevelData.biome = biomesAvailable[biomeIndex];
+  currentLevelData.biome = generated.biome;
   currentLevelData.isNight = Math.floor((lvlNum - 1) / 5) % 2 === 1;
 
-  const finishCol = generated.grid[0].length - 4;
-  const finishRow = generated.grid.length - 5;
-
   currentLevelData.finishLine = {
-    x: finishCol * TILE,
-    y: finishRow * TILE,
+    x: generated.finish.x * TILE,
+    y: generated.finish.y * TILE,
     w: TILE,
     h: 64,
   };
 
-  player.x = 50;
-  player.y = 100;
+  player.x = generated.playerStart.x * TILE;
+  player.y = generated.playerStart.y * TILE;
   player.vx = 0;
   player.vy = 0;
 }
 
-// 3. ИСПРАВЛЕННАЯ ФИЗИКА С БУФЕРИЗАЦИЕЙ ПРЫЖКА
-function updatePlayerPhysics() {
+// Физика
+function updatePlayerPhysics(dt) {
+  let timeFactor = dt * 60;
+
   const movingLeft = keys.left || touchControls.leftBtn.active;
   const movingRight = keys.right || touchControls.rightBtn.active;
   const wantsJump = keys.jump || touchControls.jumpBtn.active;
@@ -187,24 +186,25 @@ function updatePlayerPhysics() {
   else if (movingRight) player.vx = player.speed;
   else player.vx = 0;
 
-  player.x += player.vx;
+  player.x += player.vx * timeFactor;
   checkGridCollisions("x");
 
-  // Прыжок сработает мгновенно, как только персонаж окажется на земле
   if (wantsJump && player.grounded) {
     player.vy = player.jumpForce;
     player.grounded = false;
-    keys.jump = false; // Сбрасываем триггер
+    keys.jump = false;
   }
 
-  player.vy += player.gravity;
-  player.y += player.vy;
+  player.vy += player.gravity * timeFactor;
+  player.y += player.vy * timeFactor;
   player.grounded = false;
   checkGridCollisions("y");
 }
 
 function checkGridCollisions(axis) {
   const grid = currentLevelData.grid;
+  if (!grid || grid.length === 0) return;
+  
   const rows = grid.length;
   const cols = grid[0].length;
 
@@ -214,14 +214,9 @@ function checkGridCollisions(axis) {
   const bottomTile = Math.floor((player.y + player.h - 1) / TILE);
 
   for (let r = Math.max(0, topTile); r <= Math.min(rows - 1, bottomTile); r++) {
-    for (
-      let c = Math.max(0, leftTile);
-      c <= Math.min(cols - 1, rightTile);
-      c++
-    ) {
+    for (let c = Math.max(0, leftTile); c <= Math.min(cols - 1, rightTile); c++) {
       let tileId = grid[r][c];
 
-      // Игнорируем декор (8-10) и воду (6, 7) для физики
       if (tileId > 0 && !(tileId >= 6 && tileId <= 10)) {
         let tileBox = { x: c * TILE, y: r * TILE, w: TILE, h: TILE };
         if (checkCollision(player, tileBox)) {
@@ -267,7 +262,7 @@ function playerHurt() {
   player.vy = 0;
 }
 
-// Зацикленная отрисовка движущихся слоев параллакса с вертикальным смещением
+// Параллакс
 function drawParallaxLayer(ctx, img, speedFactor, camX, yOffset) {
   if (!img || !img.complete || img.naturalWidth === 0) return;
   let w = img.naturalWidth;
@@ -279,13 +274,11 @@ function drawParallaxLayer(ctx, img, speedFactor, camX, yOffset) {
   }
 }
 
-// Рендеринг фона: статичный задник -> заливка низа -> поднятый параллакс
 function drawParallaxBackground(camX) {
   const biome = currentLevelData.biome || "exclusion";
   const isNight = currentLevelData.isNight;
   const assets = assetsCache[biome] || {};
 
-  // 1. Статический фон (неподвижный, на весь экран)
   let staticBgKey = isNight ? "bg_background_night" : "bg_background_day";
   let staticBg = assets[staticBgKey];
 
@@ -296,19 +289,14 @@ function drawParallaxBackground(camX) {
     ctx.fillRect(0, 0, canvas.width, canvas.height);
   }
 
-  // 2. ЗАЛИВКА НИЖНЕЙ ЗОНЫ ПОД ЗЕМЛЕЙ И В ЯМАХ
-  // Закрашиваем всё пространство под уровнем земли глубоким темным цветом
-  ctx.fillStyle = isNight ? "#292330" : "#33446e";
   ctx.fillStyle = biome === "industrial" && isNight ? "#1e1b2e" : "#37446e";
   ctx.fillRect(0, canvas.height - 96, canvas.width, 180);
 
-  // 3. ПОДНИМАЕМ ПАРАЛЛАКС ВВЕРХ
-  // Изменяй значение yOffset (например, -120 или -150), чтобы точно откалибровать высоту зданий
   let yOffset = -64;
-
   let backImg, midImg, frontImg;
 
-  if (biome === "industrial") {
+  if (biome === 'industrial') {
+    // Для industrial берем общие слои независимо от времени суток
     backImg = assets["bg_back"];
     midImg = assets["bg_mid"];
     frontImg = assets["bg_front"];
@@ -324,6 +312,7 @@ function drawParallaxBackground(camX) {
   drawParallaxLayer(ctx, frontImg, 0.7, camX, yOffset);
 }
 
+// HUD
 function drawInGameHUD(ctx) {
   ctx.save();
   ctx.font = "bold 15px 'Courier New', monospace";
@@ -337,11 +326,7 @@ function drawInGameHUD(ctx) {
   ctx.stroke();
 
   ctx.fillStyle = "#38bdf8";
-  ctx.fillText(
-    `L:${gameStats.level} [${currentLevelData.biome.toUpperCase().slice(0, 3)}]`,
-    22,
-    41,
-  );
+  ctx.fillText(`L:${gameStats.level} [${currentLevelData.biome.toUpperCase().slice(0, 3)}]`, 22, 41);
 
   for (let i = 0; i < gameStats.maxLives; i++) {
     ctx.fillStyle = i < gameStats.lives ? "#ef4444" : "#334155";
@@ -365,9 +350,7 @@ function drawInGameHUD(ctx) {
   ctx.fillText(`SCORE: ${gameStats.score}`, canvas.width - 128, 41);
 
   const drawTouchBtn = (btn, text, active) => {
-    ctx.fillStyle = active
-      ? "rgba(56, 189, 248, 0.4)"
-      : "rgba(30, 27, 75, 0.6)";
+    ctx.fillStyle = active ? "rgba(56, 189, 248, 0.4)" : "rgba(30, 27, 75, 0.6)";
     ctx.strokeStyle = "#38bdf8";
     ctx.lineWidth = 2;
     ctx.beginPath();
@@ -405,6 +388,7 @@ function drawPlayerSprite(ctx, p) {
   ctx.fillRect(p.x + 10, p.y + 6, 8, 3);
 }
 
+// Отрисовка
 function draw() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   drawParallaxBackground(camera.x);
@@ -430,7 +414,7 @@ function draw() {
   };
 
   if (grid && grid.length > 0) {
-    // СЛОЙ 0: ДЕКОР
+    // Декор
     for (let r = 0; r < grid.length; r++) {
       for (let c = 0; c < grid[r].length; c++) {
         let tileId = grid[r][c];
@@ -443,12 +427,11 @@ function draw() {
       }
     }
 
-    // СЛОЙ 1: ОСНОВНЫЕ ТАЙЛЫ
+    // Основные тайлы
     for (let r = 0; r < grid.length; r++) {
       for (let c = 0; c < grid[r].length; c++) {
         let tileId = grid[r][c];
-        if (tileId === 0 || (tileId >= 8 && tileId <= 10) || tileId === 6)
-          continue;
+        if (tileId === 0 || (tileId >= 8 && tileId <= 10) || tileId === 6) continue;
 
         let img = biomeAssets[tileMapping[tileId]];
         if (img && img.complete && img.naturalWidth > 0) {
@@ -461,7 +444,7 @@ function draw() {
     }
   }
 
-  // СЛОЙ 2: ПОРТАЛ
+  // Портал
   let f = currentLevelData.finishLine;
   if (f) {
     let portalImg = assetsCache.common ? assetsCache.common.portal : null;
@@ -473,19 +456,13 @@ function draw() {
       ctx.lineWidth = 3;
       ctx.fillStyle = "rgba(34, 197, 94, 0.3)";
       ctx.beginPath();
-      ctx.roundRect(
-        f.x - pulse / 2,
-        f.y - pulse / 2,
-        f.w + pulse,
-        f.h + pulse,
-        12,
-      );
+      ctx.roundRect(f.x - pulse / 2, f.y - pulse / 2, f.w + pulse, f.h + pulse, 12);
       ctx.fill();
       ctx.stroke();
     }
   }
 
-  // СЛОЙ 3: ИГРОК
+  // Игрок
   let playerImg = assetsCache.common ? assetsCache.common.player : null;
   if (playerImg && playerImg.complete && playerImg.naturalWidth > 0) {
     ctx.drawImage(playerImg, player.x, player.y, player.w, player.h);
@@ -493,7 +470,7 @@ function draw() {
     drawPlayerSprite(ctx, player);
   }
 
-  // СЛОЙ 4: ВЕРХ ВОДЫ СПЕРЕДИ
+  // Верх воды спереди
   if (grid && grid.length > 0) {
     for (let r = 0; r < grid.length; r++) {
       for (let c = 0; c < grid[r].length; c++) {
@@ -514,41 +491,58 @@ function draw() {
   drawInGameHUD(ctx);
 }
 
-function update() {
-  // 🔍 Если включен режим инспектора — двигаем камеру стрелками и не трогаем физику игрока
+// Обновление кадров
+function update(dt) {
+  if (!currentLevelData.grid || currentLevelData.grid.length === 0) return;
+
   if (freeCameraMode.active) {
+    let camSpeedMultiplier = dt * 60;
     if (keys.left || touchControls.leftBtn.active)
-      freeCameraMode.x -= freeCameraMode.speed;
+      freeCameraMode.x -= freeCameraMode.speed * camSpeedMultiplier;
     if (keys.right || touchControls.rightBtn.active)
-      freeCameraMode.x += freeCameraMode.speed;
+      freeCameraMode.x += freeCameraMode.speed * camSpeedMultiplier;
 
     const maxCamX = currentLevelData.grid[0].length * TILE - canvas.width;
     camera.x = Math.max(0, Math.min(freeCameraMode.x, maxCamX));
     return;
   }
 
-  // Обычная игровая логика
-  updatePlayerPhysics();
+  updatePlayerPhysics(dt);
 
   if (player.y > canvas.height) playerHurt();
 
   let f = currentLevelData.finishLine;
-  if (checkCollision(player, f)) {
+  if (f && checkCollision(player, f)) {
     gameStats.score += 100;
     alert(`🎉 Уровень ${gameStats.level} пройден! +100 очков.`);
     gameStats.level++;
     loadLevel(gameStats.level);
   }
 
-  camera.x = Math.max(0, player.x - 300);
+  // 🍄 КАМЕРА В СТИЛЕ МАРИО (300 пикселей зона комфорта)
+  const deadZoneX = 300; 
+  if (player.x > camera.x + deadZoneX) {
+    camera.x = player.x - deadZoneX;
+  }
+  
+  const maxCamX = currentLevelData.grid[0].length * TILE - canvas.width;
+  camera.x = Math.max(0, Math.min(camera.x, maxCamX));
 }
 
-function loop() {
-  update();
+let lastTime = performance.now();
+
+function loop(currentTime) {
+  let deltaTime = (currentTime - lastTime) / 1000;
+  lastTime = currentTime;
+
+  if (deltaTime > 0.1) deltaTime = 0.1;
+
+  update(deltaTime);
   draw();
   requestAnimationFrame(loop);
 }
 
+// Запуск движка после загрузки ассетов
 loadAllAssets(() => {
   console.log("🎮 Движок запущен!");
   const loader = document.getElementById("loader-screen");
@@ -557,3 +551,4 @@ loadAllAssets(() => {
   loadLevel(gameStats.level);
   loop();
 });
+})

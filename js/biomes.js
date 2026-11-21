@@ -82,3 +82,20 @@ export const BIOME_CONFIGS = {
     particleColor: "#a855f7"
   }
 };
+// Добавь в конец файла js/biomes.js
+
+export class BiomeManager {
+  constructor() {
+    this.current = BIOME_CONFIGS.industrial_day;
+  }
+
+  setBiome(key) {
+    if (BIOME_CONFIGS[key]) {
+      this.current = BIOME_CONFIGS[key];
+    }
+  }
+
+  getConfig() {
+    return this.current;
+  }
+}

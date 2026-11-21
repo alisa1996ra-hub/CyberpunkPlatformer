@@ -4,66 +4,44 @@ export class WaterWave {
   constructor(canvasWidth, canvasHeight) {
     this.width = canvasWidth;
     this.height = canvasHeight;
-
-    // Поднимаем воду выше, чтобы её сразу было видно (на середину/нижнюю треть холста)
-    this.yLevel = canvasHeight - 200;
-    this.amplitude = 18; // Делаем волны пошире
-    this.frequency = 0.012;
-    this.speed = 0.04;
     this.time = 0;
   }
 
-  update() {
-    this.time += this.speed;
+  update(deltaTime = 0.016) {
+    // ⚙️ СКОРОСТЬ ТЕЧЕНИЯ ВОДЫ
+    // Чем меньше число, тем медленнее и спокойнее течет вода.
+    // Умножаем на deltaTime, чтобы скорость была независима от FPS!
+    const dt = Math.min(deltaTime, 0.05);
+    this.time += 2.0 * dt; 
   }
 
-  draw(ctx) {
+ // Отрисовка воды с заполнением пространства под волной
+  drawAt(ctx, x, y, width, height, isSurface = true) {
     ctx.save();
+    
+    // 🌊 1. Заливаем всё пространство ямы/тайла под водой сплошным полупрозрачным цветом
+    ctx.fillStyle = isSurface ? 'rgba(0, 255, 204, 0.45)' : 'rgba(14, 116, 144, 0.85)';
+    ctx.fillRect(x, y, width, height);
 
-    ctx.beginPath();
-    ctx.moveTo(0, this.height);
-    ctx.lineTo(0, this.yLevel);
+    // 2. Если это поверхность, рисуем красивую колышущуюся неоновую линию сверху
+    if (isSurface) {
+      ctx.beginPath();
+      
+      const waveFrequency = 0.03; // Ширина волны
+      const waveAmplitude = 2.0;  // Высота гребня
 
-    for (let x = 0; x <= this.width; x += 5) {
-      const y =
-        this.yLevel +
-        Math.sin(x * this.frequency + this.time) * this.amplitude +
-        Math.cos(x * 0.006 + this.time * 0.4) * (this.amplitude / 2);
-      ctx.lineTo(x, y);
+      const y1 = y + Math.sin(x * waveFrequency + this.time) * waveAmplitude;
+      const y2 = y + Math.sin((x + width) * waveFrequency + this.time) * waveAmplitude;
+
+      ctx.moveTo(x, y1);
+      ctx.lineTo(x + width, y2);
+
+      ctx.strokeStyle = '#00ffcc';
+      ctx.lineWidth = 1.5;
+      ctx.shadowColor = '#00ffcc';
+      ctx.shadowBlur = 4;
+      ctx.stroke();
     }
-
-    ctx.lineTo(this.width, this.height);
-    ctx.closePath();
-
-    const gradient = ctx.createLinearGradient(
-      0,
-      this.yLevel - 40,
-      0,
-      this.height,
-    );
-    gradient.addColorStop(0, "rgba(0, 255, 204, 0.6)");
-    gradient.addColorStop(0.3, "rgba(14, 116, 144, 0.8)");
-    gradient.addColorStop(1, "rgba(3, 7, 18, 0.98)");
-
-    ctx.fillStyle = gradient;
-    ctx.fill();
-
-    // Неоновая линия волны
-    ctx.beginPath();
-    for (let x = 0; x <= this.width; x += 5) {
-      const y =
-        this.yLevel +
-        Math.sin(x * this.frequency + this.time) * this.amplitude +
-        Math.cos(x * 0.006 + this.time * 0.4) * (this.amplitude / 2);
-      if (x === 0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
-    }
-
-    ctx.strokeStyle = "#00ffcc";
-    ctx.lineWidth = 3;
-    ctx.shadowColor = "#00ffcc";
-    ctx.shadowBlur = 15;
-    ctx.stroke();
 
     ctx.restore();
   }

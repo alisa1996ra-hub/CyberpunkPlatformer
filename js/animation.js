@@ -33,3 +33,4 @@ export class SpriteAnimator {
     );
   }
 }
+export { SpriteAnimator as AnimationController };
