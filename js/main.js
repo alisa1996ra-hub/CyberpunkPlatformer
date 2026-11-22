@@ -697,25 +697,25 @@ function getTouchControlsLayout() {
     rect && rect.height ? rect.height : window.innerHeight || LOGICAL_HEIGHT;
   const aspect = viewW / Math.max(1, viewH);
 
-  // Земля = 3 тайла (3 * 32 = 96px). Делаем диаметр кнопок не больше высоты земли
-  // и масштабируем компактнее на маленьких и узких экранах.
-  const narrowFactor = aspect < 1.55 ? Math.max(0.74, aspect / 1.55) : 1;
-  const smallScreenFactor = viewW < 720 || viewH < 380 ? 0.84 : 1;
+  // Компромиссный размер: удобно попадать пальцем, но не вылезает за высоту земли (~96px)
+  // и не перекрывает центр на узких экранах.
+  const narrowFactor = aspect < 1.55 ? Math.max(0.84, aspect / 1.55) : 1;
+  const smallScreenFactor = viewW < 700 || viewH < 360 ? 0.9 : 1;
   const scale = Math.max(
-    0.66,
+    0.78,
     Math.min(1.0, narrowFactor * smallScreenFactor),
   );
 
-  const moveR = Math.round(25 * scale);
-  const actionR = Math.round(24 * scale);
-  const utilR = Math.round(19 * scale);
-  const bottomMargin = Math.max(14, Math.round(20 * scale));
-  const sideMargin = Math.max(22, Math.round(34 * scale));
-  const moveGap = Math.round(14 * scale);
-  const rightGap = Math.round(10 * scale);
+  const moveR = Math.round(33 * scale);
+  const actionR = Math.round(32 * scale);
+  const bottomMargin = Math.max(14, Math.round(18 * scale));
+  const sideMargin = Math.max(24, Math.round(42 * scale));
+  const moveGap = Math.round(18 * scale);
+  const rightGap = Math.round(18 * scale);
 
   const buttons = [];
 
+  // Слева: крупные кнопки движения (◀ и ▶)
   const leftX = sideMargin + moveR;
   const rightX = leftX + moveR * 2 + moveGap;
   const leftCenterY = LOGICAL_HEIGHT - bottomMargin - moveR;
@@ -731,7 +731,7 @@ function getTouchControlsLayout() {
     stroke: "#38bdf8",
     fill: "rgba(56,189,248,0.24)",
     textColor: "#ffffff",
-    fontSize: Math.max(13, Math.round(17 * scale)),
+    fontSize: Math.max(15, Math.round(20 * scale)),
   });
 
   buttons.push({
@@ -745,31 +745,18 @@ function getTouchControlsLayout() {
     stroke: "#38bdf8",
     fill: "rgba(56,189,248,0.24)",
     textColor: "#ffffff",
-    fontSize: Math.max(13, Math.round(17 * scale)),
+    fontSize: Math.max(15, Math.round(20 * scale)),
   });
 
+  // Снизу справа: только 2 крупные кнопки — Атака/подбор (👊) и Прыжок (▲)
   const rightCenterY = LOGICAL_HEIGHT - bottomMargin - actionR;
-  let cursorX = LOGICAL_WIDTH - sideMargin - actionR;
-
-  buttons.push({
-    id: "btn-jump",
-    label: "▲",
-    x: cursorX,
-    y: rightCenterY,
-    r: actionR,
-    code: "KeyW",
-    key: "w",
-    stroke: "#38bdf8",
-    fill: "rgba(56,189,248,0.28)",
-    textColor: "#ffffff",
-    fontSize: Math.max(13, Math.round(17 * scale)),
-  });
-  cursorX -= actionR + rightGap + actionR;
+  const jumpX = LOGICAL_WIDTH - sideMargin - actionR;
+  const attackX = jumpX - actionR * 2 - rightGap;
 
   buttons.push({
     id: "btn-attack",
     label: "👊",
-    x: cursorX,
+    x: attackX,
     y: rightCenterY,
     r: actionR,
     code: "KeyF",
@@ -777,53 +764,63 @@ function getTouchControlsLayout() {
     stroke: "#ec4899",
     fill: "rgba(236,72,153,0.28)",
     textColor: "#ffffff",
-    fontSize: Math.max(13, Math.round(16 * scale)),
+    fontSize: Math.max(15, Math.round(19 * scale)),
   });
-  cursorX -= actionR + rightGap + utilR;
 
-  const turboActive = Boolean(player && player.isTurboActive);
   buttons.push({
-    id: "btn-turbo",
-    label: "⚡",
-    x: cursorX,
+    id: "btn-jump",
+    label: "▲",
+    x: jumpX,
     y: rightCenterY,
-    r: utilR,
-    code: "KeyE",
-    key: "e",
-    stroke: turboActive ? "#00ffcc" : "#64748b",
-    fill: turboActive ? "rgba(0,255,204,0.22)" : "rgba(15,23,42,0.72)",
-    textColor: turboActive ? "#00ffcc" : "#94a3b8",
-    fontSize: Math.max(11, Math.round(14 * scale)),
+    r: actionR,
+    code: "KeyW",
+    key: "w",
+    stroke: "#38bdf8",
+    fill: "rgba(56,189,248,0.28)",
+    textColor: "#ffffff",
+    fontSize: Math.max(15, Math.round(20 * scale)),
   });
-  cursorX -= utilR + rightGap + utilR;
+
+  // Сверху справа от рюкзака: две круглые кнопки диаметром = высоте плашки рюкзака (badgeH = 38 => r = 19)
+  // Первая от рюкзака: Repair (🔧), правее от неё: Суператака / Turbo (⚡)
+  const badgeW = 220;
+  const badgeH = 38;
+  const badgeX = Math.round((LOGICAL_WIDTH - badgeW) / 2);
+  const badgeY = 14;
+  const topBtnR = Math.round(badgeH / 2); // диаметр равен высоте кнопки рюкзака (38px)
+  const topBtnCenterY = badgeY + badgeH / 2;
+  const topGap = 12;
+
+  const repairX = badgeX + badgeW + topGap + topBtnR;
+  const turboX = repairX + topBtnR * 2 + topGap;
+  const turboActive = Boolean(player && player.isTurboActive);
 
   buttons.push({
     id: "btn-repair",
     label: "🔧",
-    x: cursorX,
-    y: rightCenterY,
-    r: utilR,
+    x: repairX,
+    y: topBtnCenterY,
+    r: topBtnR,
     code: "KeyR",
     key: "r",
     stroke: "#fbbf24",
     fill: "rgba(251,191,36,0.22)",
     textColor: "#fbbf24",
-    fontSize: Math.max(11, Math.round(14 * scale)),
+    fontSize: 15,
   });
-  cursorX -= utilR + rightGap + utilR;
 
   buttons.push({
-    id: "btn-bag",
-    label: "🎒",
-    x: cursorX,
-    y: rightCenterY,
-    r: utilR,
-    code: "KeyI",
-    key: "i",
-    stroke: "#00ffcc",
-    fill: "rgba(0,255,204,0.20)",
-    textColor: "#00ffcc",
-    fontSize: Math.max(11, Math.round(14 * scale)),
+    id: "btn-turbo",
+    label: "⚡",
+    x: turboX,
+    y: topBtnCenterY,
+    r: topBtnR,
+    code: "KeyE",
+    key: "e",
+    stroke: turboActive ? "#00ffcc" : "#64748b",
+    fill: turboActive ? "rgba(0,255,204,0.22)" : "rgba(15,23,42,0.78)",
+    textColor: turboActive ? "#00ffcc" : "#94a3b8",
+    fontSize: 15,
   });
 
   return buttons;
