@@ -1646,25 +1646,45 @@ function setupMobileControls() {
   }
 
   let jumpBufferUntil = 0;
+  let lastJumpAttemptTime = 0;
 
-  function triggerJumpSmooth() {
-    if (!player || !gameStarted) return;
-    jumpBufferUntil = performance.now() + 140;
+  function tryExecuteJump(now) {
+    if (!player || !gameStarted) return false;
+    if (now - lastJumpAttemptTime < 75) return false;
+    lastJumpAttemptTime = now;
+
+    const prevY = player.y;
+    const prevVy = player.vy ?? player.velocityY ?? 0;
+
     if (typeof player.jump === "function") {
       player.jump();
     }
+
+    const newY = player.y;
+    const newVy = player.vy ?? player.velocityY ?? 0;
+    const jumped =
+      (typeof newY === "number" && typeof prevY === "number" && newY < prevY - 0.5) ||
+      (typeof newVy === "number" && newVy < prevVy - 0.5) ||
+      (typeof newVy === "number" && newVy < -1);
+
+    if (jumped) {
+      jumpBufferUntil = 0;
+      return true;
+    }
+    return false;
+  }
+
+  function triggerJumpSmooth() {
+    if (!player || !gameStarted) return;
+    const now = performance.now();
+    jumpBufferUntil = now + 220;
+    tryExecuteJump(now);
   }
 
   function processJumpBuffer(now) {
     if (!player || !gameStarted) return;
     if (now <= jumpBufferUntil) {
-      const grounded = Boolean(
-        player.onGround || player.isGrounded || player.grounded,
-      );
-      if (grounded && typeof player.jump === "function") {
-        player.jump();
-        jumpBufferUntil = 0;
-      }
+      tryExecuteJump(now);
     }
   }
 
