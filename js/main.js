@@ -851,12 +851,13 @@ function drawCanvasTouchControls(targetCtx) {
       targetCtx.scale(0.92, 0.92);
     }
 
+    targetCtx.shadowBlur = 0;
     targetCtx.beginPath();
     targetCtx.arc(0, 0, btn.r, 0, Math.PI * 2);
-    targetCtx.fillStyle = isPressed ? "rgba(255,255,255,0.24)" : btn.fill;
+    targetCtx.fillStyle = isPressed ? "rgba(255,255,255,0.28)" : btn.fill;
     targetCtx.fill();
-    targetCtx.lineWidth = 2;
-    targetCtx.strokeStyle = btn.stroke;
+    targetCtx.lineWidth = isPressed ? 2.5 : 2;
+    targetCtx.strokeStyle = isPressed ? "#ffffff" : btn.stroke;
     targetCtx.stroke();
 
     targetCtx.fillStyle = btn.textColor;
@@ -1552,7 +1553,9 @@ function onWindowKeyDown(e) {
 
   if (e.code === "Space" || e.code === "ArrowUp" || e.code === "KeyW") {
     e.preventDefault();
-    if (player && typeof player.jump === "function") {
+    if (typeof window.__triggerJumpSmooth === "function") {
+      window.__triggerJumpSmooth();
+    } else if (player && typeof player.jump === "function") {
       player.jump();
     }
   }
@@ -1642,6 +1645,106 @@ function setupMobileControls() {
     window.removeEventListener("pointercancel", window.__prevCanvasPointerUp);
   }
 
+  let jumpBufferUntil = 0;
+
+  function triggerJumpSmooth() {
+    if (!player || !gameStarted) return;
+    jumpBufferUntil = performance.now() + 140;
+    if (typeof player.jump === "function") {
+      player.jump();
+    }
+  }
+
+  function processJumpBuffer(now) {
+    if (!player || !gameStarted) return;
+    if (now <= jumpBufferUntil) {
+      const grounded = Boolean(
+        player.onGround || player.isGrounded || player.grounded,
+      );
+      if (grounded && typeof player.jump === "function") {
+        player.jump();
+        jumpBufferUntil = 0;
+      }
+    }
+  }
+
+  window.__triggerJumpSmooth = triggerJumpSmooth;
+  window.__processJumpBuffer = processJumpBuffer;
+
+  const syncKeysFromTouchMap = () => {
+    const downCodes = new Set();
+    activeTouchPointers.forEach((info) => {
+      if (info && info.code) downCodes.add(info.code);
+    });
+
+    const managedCodes = ["KeyA", "KeyD", "KeyF"];
+    for (const code of managedCodes) {
+      const shouldBeDown = downCodes.has(code);
+      if (shouldBeDown && !keys[code]) {
+        keys[code] = true;
+        if (code === "KeyF") {
+          triggerHoldActionF();
+        }
+      } else if (!shouldBeDown && keys[code]) {
+        keys[code] = false;
+      }
+    }
+  };
+
+  const activateTouchBtn = (pointerId, btn) => {
+    const prev = activeTouchPointers.get(pointerId);
+    if (prev && prev.id === btn.id) return;
+
+    if (btn.code === "KeyW") {
+      triggerJumpSmooth();
+      activeTouchPointers.set(pointerId, {
+        id: btn.id,
+        code: btn.code,
+        key: btn.key,
+        isMomentary: true,
+      });
+      return;
+    }
+
+    if (btn.code === "KeyR") {
+      activeTouchPointers.set(pointerId, {
+        id: btn.id,
+        code: btn.code,
+        key: btn.key,
+        isMomentary: true,
+      });
+      handleEngineeringInteract();
+      return;
+    }
+
+    if (btn.code === "KeyE") {
+      activeTouchPointers.set(pointerId, {
+        id: btn.id,
+        code: btn.code,
+        key: btn.key,
+        isMomentary: true,
+      });
+      if (player && typeof player.toggleTurbo === "function") {
+        player.toggleTurbo();
+      }
+      return;
+    }
+
+    activeTouchPointers.set(pointerId, {
+      id: btn.id,
+      code: btn.code,
+      key: btn.key,
+      isMomentary: false,
+    });
+    syncKeysFromTouchMap();
+  };
+
+  const releaseTouchPointer = (pointerId) => {
+    if (!activeTouchPointers.has(pointerId)) return;
+    activeTouchPointers.delete(pointerId);
+    syncKeysFromTouchMap();
+  };
+
   const onPointerDown = (e) => {
     if (!gameStarted) return;
     if (e.pointerType === "mouse" && e.button !== 0) return;
@@ -1651,55 +1754,27 @@ function setupMobileControls() {
     if (!btn) return;
 
     if (e.cancelable) e.preventDefault();
-    if (canvas.setPointerCapture) {
-      try {
-        canvas.setPointerCapture(e.pointerId);
-      } catch (_) {}
-    }
-
-    const prev = activeTouchPointers.get(e.pointerId);
-    if (prev && prev.code !== btn.code) {
-      dispatchMobileKey(prev.code, prev.key, false);
-    }
-
-    activeTouchPointers.set(e.pointerId, {
-      id: btn.id,
-      code: btn.code,
-      key: btn.key,
-    });
-    dispatchMobileKey(btn.code, btn.key, true);
+    activateTouchBtn(e.pointerId, btn);
   };
 
   const onPointerMove = (e) => {
     if (!activeTouchPointers.has(e.pointerId)) return;
     const pt = getLogicalCanvasCoords(e.clientX, e.clientY);
     const btn = hitTestTouchButton(pt.x, pt.y);
-    const current = activeTouchPointers.get(e.pointerId);
 
     if (!btn) {
-      if (current && current.code) {
-        dispatchMobileKey(current.code, current.key, false);
-      }
-      activeTouchPointers.delete(e.pointerId);
+      releaseTouchPointer(e.pointerId);
       return;
     }
 
-    if (current && current.id !== btn.id) {
-      dispatchMobileKey(current.code, current.key, false);
-      activeTouchPointers.set(e.pointerId, {
-        id: btn.id,
-        code: btn.code,
-        key: btn.key,
-      });
-      dispatchMobileKey(btn.code, btn.key, true);
+    const current = activeTouchPointers.get(e.pointerId);
+    if (!current || current.id !== btn.id) {
+      activateTouchBtn(e.pointerId, btn);
     }
   };
 
   const onPointerEnd = (e) => {
-    const current = activeTouchPointers.get(e.pointerId);
-    if (!current) return;
-    activeTouchPointers.delete(e.pointerId);
-    dispatchMobileKey(current.code, current.key, false);
+    releaseTouchPointer(e.pointerId);
   };
 
   window.__prevCanvasPointerDown = onPointerDown;
@@ -2011,6 +2086,9 @@ function gameLoop(timestamp) {
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     handleInput();
+    if (typeof window.__processJumpBuffer === "function") {
+      window.__processJumpBuffer(timestamp);
+    }
     updateHoldActionF();
 
     if (gameStarted && player && currentLevelData) {
