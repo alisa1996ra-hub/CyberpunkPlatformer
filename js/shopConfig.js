@@ -6,7 +6,7 @@ export const SHOP_CONFIG = {
     maxHp: {
       id: "maxHp",
       name: "Нано-броня (HP)",
-      icon: "50.png",          // Иконка с двумя плюсами
+      icon: "50.png",
       baseValue: 100,
       stepValue: 10,
       basePrice: 50,
@@ -16,7 +16,7 @@ export const SHOP_CONFIG = {
     backpack: {
       id: "backpack",
       name: "Инженерный рюкзак (Inventory)",
-      icon: "46.png",          // Иконка расширения
+      icon: "46.png",
       baseValue: 4,
       stepValue: 2,
       basePrice: 100,
@@ -26,7 +26,7 @@ export const SHOP_CONFIG = {
     attack: {
       id: "attack",
       name: "Модификатор удара (Attack)",
-      icon: "41.png",          // Иконка стрелки вверх
+      icon: "41.png",
       baseValue: 10,
       stepValue: 5,
       basePrice: 75,
@@ -36,7 +36,7 @@ export const SHOP_CONFIG = {
     maxEnergy: {
       id: "maxEnergy",
       name: "Энергоядро (Energy)",
-      icon: "31.png",          // Иконка молнии
+      icon: "31.png",
       baseValue: 100,
       stepValue: 10,
       basePrice: 40,
@@ -46,9 +46,9 @@ export const SHOP_CONFIG = {
     tradeSkill: {
       id: "tradeSkill",
       name: "Черный рынок (Курс продажи)",
-      icon: "27.png",          // Иконка нейросети/торговли
-      baseValue: 1.0,          // Базовый коэффициент скупки
-      stepValue: 0.1,          // +10% к стоимости продажи запчастей
+      icon: "27.png",
+      baseValue: 1.0,
+      stepValue: 0.1,
       basePrice: 120,
       priceMultiplier: 2.2,
       maxLevel: 5
@@ -89,8 +89,8 @@ export const SHOP_CONFIG = {
 
   // --- ИКОНКИ ДЛЯ ИНТЕРФЕЙСА И КНОПОК ---
   uiIcons: {
-    shopExchange: "22.png",    // Иконка обмена/рынка
-    settings: "20.png",        // Иконка общих настроек
-    shopUpgrades: "8.png"      // Иконка магазина улучшений
+    shopExchange: "22.png",
+    settings: "20.png",
+    shopUpgrades: "8.png"
   }
 };

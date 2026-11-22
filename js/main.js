@@ -86,6 +86,7 @@ function hideExternalBackpackDom() {
 function toggleBackpackUI() {
   canvasBackpackOpen = !canvasBackpackOpen;
   hideExternalBackpackDom();
+  fitShopModalToViewport();
 }
 
 function closeCanvasBackpack() {
@@ -187,6 +188,9 @@ function createCleanCollectible(x, y, materialId) {
 }
 
 window.openShopUI = () => {
+  if (typeof window.fitShopModalToViewport === "function") {
+    window.fitShopModalToViewport();
+  }
   openShop();
 };
 
@@ -353,6 +357,23 @@ window.__menuChoice = {
   level: 1,
   isNight: false,
 };
+
+
+function fitShopModalToViewport() {
+  const modal = document.getElementById("shop-modal");
+  if (!modal) return;
+  const container = document.getElementById("game-container");
+  const rect = container ? container.getBoundingClientRect() : null;
+  if (rect && rect.width > 0 && rect.height > 0) {
+    modal.style.left = `${Math.round(rect.left)}px`;
+    modal.style.top = `${Math.round(rect.top)}px`;
+    modal.style.width = `${Math.round(rect.width)}px`;
+    modal.style.height = `${Math.round(rect.height)}px`;
+    modal.style.maxWidth = `${Math.round(rect.width)}px`;
+    modal.style.maxHeight = `${Math.round(rect.height)}px`;
+  }
+}
+window.fitShopModalToViewport = fitShopModalToViewport;
 
 function resizeCanvas() {
   if (!canvas) return;
