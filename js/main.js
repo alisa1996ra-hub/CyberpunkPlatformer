@@ -119,6 +119,22 @@ function getInventoryState() {
   return playerData.inventory;
 }
 
+function getMaxInventoryCapacity() {
+  const cfg = SHOP_CONFIG?.upgrades?.backpack;
+  const baseVal = Number(cfg?.baseValue) || 10;
+  const stepVal = Number(cfg?.stepValue) || 2;
+  const lvl =
+    Math.max(
+      0,
+      Number(
+        window.playerData?.upgrades?.backpack ??
+          playerData?.upgrades?.backpack ??
+          0,
+      ) || 0,
+    );
+  return baseVal + lvl * stepVal;
+}
+
 function getTotalInventoryCount() {
   const inv = getInventoryState();
   return MATERIAL_KEYS.reduce(
@@ -270,6 +286,9 @@ function handleBuyUpgrade(upgradeId, cost) {
     if (upgradeId === "maxHp" && player) {
       player.maxHp += 10;
       player.hp = player.maxHp;
+    } else if (upgradeId === "backpack") {
+      const cap = getMaxInventoryCapacity();
+      console.log(`🎒 Вместимость рюкзака увеличена до ${cap} слотов`);
     }
   } else {
     console.log("⚠️ Не хватает кредитов!");
@@ -279,9 +298,10 @@ function handleBuyUpgrade(upgradeId, cost) {
 function handleTradeMaterial(materialId, action, price) {
   const inv = getInventoryState();
   if (action === "buy") {
+    const maxCap = getMaxInventoryCapacity();
     const total = getTotalInventoryCount();
-    if (total >= 10) {
-      console.log("⚠️ Рюкзак полон (10/10)!");
+    if (total >= maxCap) {
+      console.log(`⚠️ Рюкзак полон (${total}/${maxCap})!`);
       return;
     }
     if (playerData.credits >= price) {
@@ -357,7 +377,6 @@ window.__menuChoice = {
   level: 1,
   isNight: false,
 };
-
 
 function fitShopModalToViewport() {
   const modal = document.getElementById("shop-modal");
@@ -593,6 +612,7 @@ function drawCollectibleClean(targetCtx, item, sheetImg) {
 
 function drawCanvasHudAndBackpack(targetCtx) {
   const totalItems = getTotalInventoryCount();
+  const maxCapacity = getMaxInventoryCapacity();
   lastBackpackHitboxes = [];
 
   const badgeW = 220;
@@ -613,7 +633,7 @@ function drawCanvasHudAndBackpack(targetCtx) {
   targetCtx.font = "bold 13px monospace";
   targetCtx.textAlign = "center";
   targetCtx.fillText(
-    `🎒 РЮКЗАК ${totalItems}/10 [I]`,
+    `🎒 РЮКЗАК ${totalItems}/${maxCapacity} [I]`,
     badgeX + badgeW / 2,
     badgeY + 24,
   );
@@ -718,8 +738,6 @@ function getTouchControlsLayout() {
     rect && rect.height ? rect.height : window.innerHeight || LOGICAL_HEIGHT;
   const aspect = viewW / Math.max(1, viewH);
 
-  // Компромиссный размер: удобно попадать пальцем, но не вылезает за высоту земли (~96px)
-  // и не перекрывает центр на узких экранах.
   const narrowFactor = aspect < 1.55 ? Math.max(0.84, aspect / 1.55) : 1;
   const smallScreenFactor = viewW < 700 || viewH < 360 ? 0.9 : 1;
   const scale = Math.max(
@@ -736,7 +754,6 @@ function getTouchControlsLayout() {
 
   const buttons = [];
 
-  // Слева: крупные кнопки движения (◀ и ▶)
   const leftX = sideMargin + moveR;
   const rightX = leftX + moveR * 2 + moveGap;
   const leftCenterY = LOGICAL_HEIGHT - bottomMargin - moveR;
@@ -769,7 +786,6 @@ function getTouchControlsLayout() {
     fontSize: Math.max(15, Math.round(20 * scale)),
   });
 
-  // Снизу справа: только 2 крупные кнопки — Атака/подбор (👊) и Прыжок (▲)
   const rightCenterY = LOGICAL_HEIGHT - bottomMargin - actionR;
   const jumpX = LOGICAL_WIDTH - sideMargin - actionR;
   const attackX = jumpX - actionR * 2 - rightGap;
@@ -1464,8 +1480,12 @@ const consumedCollectibles = new WeakSet();
 
 function getCollectiblePos(item) {
   if (!item) return null;
-  const ix = Number.isFinite(Number(item.x)) ? Number(item.x) : Number(item.worldX);
-  const iy = Number.isFinite(Number(item.y)) ? Number(item.y) : Number(item.worldY);
+  const ix = Number.isFinite(Number(item.x))
+    ? Number(item.x)
+    : Number(item.worldX);
+  const iy = Number.isFinite(Number(item.y))
+    ? Number(item.y)
+    : Number(item.worldY);
   if (!Number.isFinite(ix) || !Number.isFinite(iy)) return null;
   const w = Number(item.width) || 32;
   const h = Number(item.height) || 32;
@@ -1475,9 +1495,10 @@ function getCollectiblePos(item) {
 function applySingleItemPickupToState(item) {
   const matId = item.materialId || item.id || "";
   if (item.type === "material" && matId && MATERIAL_KEYS.includes(matId)) {
+    const maxCap = getMaxInventoryCapacity();
     const total = getTotalInventoryCount();
-    if (total >= 10) {
-      console.log("⚠️ Рюкзак полон (10/10)!");
+    if (total >= maxCap) {
+      console.log(`⚠️ Рюкзак полон (${total}/${maxCap})!`);
       return false;
     }
     const inv = getInventoryState();
@@ -1500,7 +1521,10 @@ function applySingleItemPickupToState(item) {
   }
 
   if (item.type === "plasma" && player) {
-    if (typeof player.energy === "number" && typeof player.maxEnergy === "number") {
+    if (
+      typeof player.energy === "number" &&
+      typeof player.maxEnergy === "number"
+    ) {
       player.energy = Math.min(player.maxEnergy, player.energy + 25);
     }
     return true;
@@ -1541,7 +1565,6 @@ function tryCollectNearestItem(now) {
 
   if (!nearestItem) return false;
 
-  // Берём строго один ближайший предмет и сразу блокируем повторные вызовы
   consumedCollectibles.add(nearestItem);
   nearestItem.isCollected = true;
   if (typeof nearestItem.collected === "boolean") {
@@ -1549,7 +1572,8 @@ function tryCollectNearestItem(now) {
   }
 
   currentLevelData.collectibles = currentLevelData.collectibles.filter(
-    (c) => c && c !== nearestItem && !c.isCollected && !consumedCollectibles.has(c),
+    (c) =>
+      c && c !== nearestItem && !c.isCollected && !consumedCollectibles.has(c),
   );
 
   const beforeTotal = getTotalInventoryCount();
@@ -1563,8 +1587,6 @@ function tryCollectNearestItem(now) {
     } catch (_) {}
   }
 
-  // Если предмет не изменил состояние сам (например, в collect() была привязка к старому DOM-рюкзаку),
-  // начисляем ровно 1 единицу напрямую в playerData / player.
   const afterTotal = getTotalInventoryCount();
   const afterCredits = Number(playerData?.credits) || 0;
   const afterHp = Number(player?.hp) || 0;
@@ -1758,7 +1780,9 @@ function setupMobileControls() {
     const newY = player.y;
     const newVy = player.vy ?? player.velocityY ?? 0;
     const jumped =
-      (typeof newY === "number" && typeof prevY === "number" && newY < prevY - 0.5) ||
+      (typeof newY === "number" &&
+        typeof prevY === "number" &&
+        newY < prevY - 0.5) ||
       (typeof newVy === "number" && newVy < prevVy - 0.5) ||
       (typeof newVy === "number" && newVy < -1);
 
@@ -2206,8 +2230,14 @@ function init() {
   window.addEventListener("orientationchange", () => {
     setTimeout(syncViewportModeOnCollapseOrResize, 120);
   });
-  document.addEventListener("fullscreenchange", syncViewportModeOnCollapseOrResize);
-  document.addEventListener("webkitfullscreenchange", syncViewportModeOnCollapseOrResize);
+  document.addEventListener(
+    "fullscreenchange",
+    syncViewportModeOnCollapseOrResize,
+  );
+  document.addEventListener(
+    "webkitfullscreenchange",
+    syncViewportModeOnCollapseOrResize,
+  );
   setupMobileControls();
 
   loadAllAssets(() => {
@@ -2571,8 +2601,36 @@ function gameLoop(timestamp) {
 
       ctx.restore();
 
+      // 1. Ночное затемнение и купола света от фонарей/генераторов/игрока
+      if (
+        isNightTime &&
+        lightSystem &&
+        typeof lightSystem.drawNightMaskAndLamps === "function"
+      ) {
+        lightSystem.drawNightMaskAndLamps(
+          ctx,
+          LOGICAL_WIDTH,
+          LOGICAL_HEIGHT,
+          currentLevelData,
+          player,
+          camera.x,
+        );
+      }
+
+      // 2. Поверх маски и куполов: кислотный дождь, всплески на платформах и молнии
       if (weatherSystem && typeof weatherSystem.draw === "function") {
-        weatherSystem.draw(ctx, LOGICAL_WIDTH, LOGICAL_HEIGHT, isNightTime);
+        weatherSystem.draw(
+          ctx,
+          LOGICAL_WIDTH,
+          LOGICAL_HEIGHT,
+          isNightTime,
+          deltaTime,
+          {
+            cameraX: camera.x,
+            levelData: currentLevelData,
+            player,
+          },
+        );
       }
 
       if (player) {
@@ -2641,11 +2699,17 @@ function gameLoop(timestamp) {
       ctx.fillRect(LOGICAL_WIDTH - 200, 15, 180, 45);
       ctx.strokeRect(LOGICAL_WIDTH - 200, 15, 180, 45);
 
+      const currentCredits = Math.max(
+        0,
+        Math.floor(
+          Number(window.playerData?.credits ?? playerData?.credits ?? 0) || 0,
+        ),
+      );
       ctx.fillStyle = "#fbbf24";
       ctx.font = "bold 16px monospace";
       ctx.shadowColor = "#fbbf24";
       ctx.shadowBlur = 8;
-      ctx.fillText(`SCORE: 1700`, LOGICAL_WIDTH - 180, 43);
+      ctx.fillText(`${currentCredits} CR`, LOGICAL_WIDTH - 180, 43);
 
       drawCanvasHudAndBackpack(ctx);
       drawCanvasTouchControls(ctx);

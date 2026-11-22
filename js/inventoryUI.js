@@ -1,5 +1,7 @@
 // js/inventoryUI.js
 
+import { SHOP_CONFIG } from './shopConfig.js';
+
 const MATERIAL_META = {
     copper_wire: { name: 'Медный провод',       icon: 'Icon14_38.png', color: '#f97316' },
     microchip:   { name: 'Корпоративная плата', icon: 'Icon14_32.png', color: '#22c55e' },
@@ -7,7 +9,13 @@ const MATERIAL_META = {
     rare_alloy:  { name: 'Редкий сплав',        icon: 'Icon14_09.png', color: '#38bdf8' }
 };
 
-const MAX_BACKPACK_ITEMS = 10;
+function getMaxBackpackCapacity() {
+    const cfg = SHOP_CONFIG?.upgrades?.backpack;
+    const baseVal = Number(cfg?.baseValue) || 4;
+    const stepVal = Number(cfg?.stepValue) || 2;
+    const lvl = Math.max(0, Number(window.playerData?.upgrades?.backpack) || 0);
+    return baseVal + lvl * stepVal;
+}
 
 let modalEl = null;
 let isOpen = false;
@@ -209,17 +217,18 @@ export function getTotalBackpackCount() {
 }
 
 export function isBackpackFull() {
-    return getTotalBackpackCount() >= MAX_BACKPACK_ITEMS;
+    return getTotalBackpackCount() >= getMaxBackpackCapacity();
 }
 
 export function renderBackpackUI() {
     const inv = getInventory();
     const total = getTotalBackpackCount();
-    const full = total >= MAX_BACKPACK_ITEMS;
+    const maxCap = getMaxBackpackCapacity();
+    const full = total >= maxCap;
 
     const btn = document.getElementById('neon-backpack-btn');
     if (btn) {
-        btn.textContent = `🎒 РЮКЗАК ${total}/${MAX_BACKPACK_ITEMS} [I]`;
+        btn.textContent = `🎒 РЮКЗАК ${total}/${maxCap} [I]`;
         btn.classList.toggle('full', full);
     }
 
@@ -227,8 +236,16 @@ export function renderBackpackUI() {
 
     const capEl = modalEl.querySelector('.neon-bp-capacity');
     if (capEl) {
-        capEl.textContent = `${total} / ${MAX_BACKPACK_ITEMS}`;
+        capEl.textContent = `${total} / ${maxCap}`;
         capEl.classList.toggle('full', full);
+    }
+
+    const hintEl = modalEl.querySelector('.neon-bp-hint');
+    if (hintEl) {
+        hintEl.innerHTML = `
+            • Лимит: не более ${maxCap} любых материалов суммарно.<br>
+            • «НА ПОЛ» роняет 1 шт. рядом с персонажем — предмет остаётся лежать и его можно снова подобрать клавишей [F].
+        `;
     }
 
     const listEl = modalEl.querySelector('.neon-bp-list');
@@ -306,12 +323,13 @@ export function toggleBackpackUI() {
 export function initBackpackUI(dropHandler) {
     onDropCallback = dropHandler;
     ensureStyles();
+    const maxCap = getMaxBackpackCapacity();
 
     if (!document.getElementById('neon-backpack-btn')) {
         const btn = document.createElement('button');
         btn.id = 'neon-backpack-btn';
         btn.type = 'button';
-        btn.textContent = `🎒 РЮКЗАК 0/${MAX_BACKPACK_ITEMS} [I]`;
+        btn.textContent = `🎒 РЮКЗАК 0/${maxCap} [I]`;
         btn.addEventListener('click', () => toggleBackpackUI());
         document.body.appendChild(btn);
     }
@@ -323,12 +341,12 @@ export function initBackpackUI(dropHandler) {
             <div class="neon-bp-panel">
                 <div class="neon-bp-header">
                     <span class="neon-bp-title">// НЕОНОВЫЙ РЮКЗАК</span>
-                    <span class="neon-bp-capacity">0 / ${MAX_BACKPACK_ITEMS}</span>
+                    <span class="neon-bp-capacity">0 / ${maxCap}</span>
                     <button class="neon-bp-close" type="button">ESC / I</button>
                 </div>
                 <div class="neon-bp-list"></div>
                 <div class="neon-bp-hint">
-                    • Лимит: не более 10 любых материалов суммарно.<br>
+                    • Лимит: не более ${maxCap} любых материалов суммарно.<br>
                     • «НА ПОЛ» роняет 1 шт. рядом с персонажем — предмет остаётся лежать и его можно снова подобрать клавишей [F].
                 </div>
             </div>
