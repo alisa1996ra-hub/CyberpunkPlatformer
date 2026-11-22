@@ -553,9 +553,9 @@ export class Generator {
       const gCenterX = this.x + this.width / 2;
       const gCenterY = this.y + this.height / 2;
       if (Math.hypot(pCenterX - gCenterX, pCenterY - gCenterY) < 75) {
-        ctx.fillStyle = '#00ffcc';
+        ctx.fillStyle = this.isPowered ? '#00ffcc' : '#fbbf24';
         ctx.font = 'bold 10px monospace';
-        ctx.fillText('[E] ГЕНЕРАТОР', gCenterX, this.y - 10);
+        ctx.fillText(this.isPowered ? 'ГЕНЕРАТОР: АКТИВЕН' : 'ГЕНЕРАТОР: ТРЕБУЕТ ЗАПУСК', gCenterX, this.y - 10);
       }
     }
 

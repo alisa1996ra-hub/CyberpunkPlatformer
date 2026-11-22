@@ -781,19 +781,91 @@ function getTouchControlsLayout() {
     fontSize: Math.max(15, Math.round(20 * scale)),
   });
 
-  // Сверху справа от рюкзака: две круглые кнопки диаметром = высоте плашки рюкзака (badgeH = 38 => r = 19)
-  // Первая от рюкзака: Repair (🔧), правее от неё: Суператака / Turbo (⚡)
+  let nearShopConsole = false;
+  if (player && currentLevelData && Array.isArray(currentLevelData.consoles)) {
+    const py = getSafePlayerY(player);
+    nearShopConsole = currentLevelData.consoles.some(
+      (con) => Math.hypot(player.x - con.x, py - con.y) < 75,
+    );
+  }
+
+  let canRepairOrInteract = false;
+  if (player && currentLevelData) {
+    const pCenterX = player.x + (player.width || 32) / 2;
+    const pCenterY = getSafePlayerY(player) + (player.height || 32) / 2;
+
+    const nearPole = (currentLevelData.poles || []).find((pole) => {
+      if (!pole) return false;
+      const dx = Math.abs(pCenterX - pole.x);
+      const poleTop = pole.groundY - (pole.height || 200);
+      const withinVertical =
+        pCenterY >= poleTop - 30 && pCenterY <= pole.groundY + 40;
+      return withinVertical && dx < 85;
+    });
+
+    if (nearPole) {
+      if (nearPole.isDestroyed && getMaterialCount("microchip") >= 1) {
+        canRepairOrInteract = true;
+      } else if (!nearPole.isDestroyed && getMaterialCount("copper_wire") >= 1) {
+        const hasBrokenCable = (currentLevelData.cables || []).some(
+          (c) =>
+            (c.leftPole === nearPole || c.rightPole === nearPole) &&
+            (c.isBroken ||
+              c.broken ||
+              (typeof c.hp === "number" && c.hp < c.maxHp)),
+        );
+        if (hasBrokenCable) canRepairOrInteract = true;
+      }
+    }
+
+    if (!canRepairOrInteract) {
+      const nearGen = (currentLevelData.generators || []).find((gen) => {
+        const gCenterX = gen.x + (gen.width || 44) / 2;
+        const gCenterY = gen.y + (gen.height || 40) / 2;
+        return Math.hypot(pCenterX - gCenterX, pCenterY - gCenterY) < 80;
+      });
+      if (nearGen) {
+        const hasCell = getMaterialCount("power_cell") >= 1;
+        const hasWire = getMaterialCount("copper_wire") >= 1;
+        const targetObj = findNearestTargetForGenerator(nearGen);
+        if ((!nearGen.isPowered && hasCell) || (targetObj && hasWire)) {
+          canRepairOrInteract = true;
+        }
+      }
+    }
+
+    if (!canRepairOrInteract && getMaterialCount("rare_alloy") >= 1) {
+      canRepairOrInteract = true;
+    }
+  }
+
   const badgeW = 220;
   const badgeH = 38;
   const badgeX = Math.round((LOGICAL_WIDTH - badgeW) / 2);
   const badgeY = 14;
-  const topBtnR = Math.round(badgeH / 2); // диаметр равен высоте кнопки рюкзака (38px)
+  const topBtnR = Math.round(badgeH / 2);
   const topBtnCenterY = badgeY + badgeH / 2;
   const topGap = 12;
 
+  const shopX = badgeX - topGap - topBtnR;
   const repairX = badgeX + badgeW + topGap + topBtnR;
   const turboX = repairX + topBtnR * 2 + topGap;
   const turboActive = Boolean(player && player.isTurboActive);
+
+  buttons.push({
+    id: "btn-shop",
+    label: "🛒",
+    x: shopX,
+    y: topBtnCenterY,
+    r: topBtnR,
+    code: "KeyC",
+    key: "c",
+    disabled: !nearShopConsole,
+    stroke: nearShopConsole ? "#00ffcc" : "#475569",
+    fill: nearShopConsole ? "rgba(0,255,204,0.24)" : "rgba(15,23,42,0.55)",
+    textColor: nearShopConsole ? "#00ffcc" : "#64748b",
+    fontSize: 15,
+  });
 
   buttons.push({
     id: "btn-repair",
@@ -803,9 +875,10 @@ function getTouchControlsLayout() {
     r: topBtnR,
     code: "KeyR",
     key: "r",
-    stroke: "#fbbf24",
-    fill: "rgba(251,191,36,0.22)",
-    textColor: "#fbbf24",
+    disabled: !canRepairOrInteract,
+    stroke: canRepairOrInteract ? "#fbbf24" : "#475569",
+    fill: canRepairOrInteract ? "rgba(251,191,36,0.24)" : "rgba(15,23,42,0.55)",
+    textColor: canRepairOrInteract ? "#fbbf24" : "#64748b",
     fontSize: 15,
   });
 
@@ -817,6 +890,7 @@ function getTouchControlsLayout() {
     r: topBtnR,
     code: "KeyE",
     key: "e",
+    disabled: false,
     stroke: turboActive ? "#00ffcc" : "#64748b",
     fill: turboActive ? "rgba(0,255,204,0.22)" : "rgba(15,23,42,0.78)",
     textColor: turboActive ? "#00ffcc" : "#94a3b8",
@@ -1737,6 +1811,23 @@ function setupMobileControls() {
       return;
     }
 
+    if (btn.disabled) {
+      return;
+    }
+
+    if (btn.code === "KeyC") {
+      activeTouchPointers.set(pointerId, {
+        id: btn.id,
+        code: btn.code,
+        key: btn.key,
+        isMomentary: true,
+      });
+      if (typeof window.openShopUI === "function") {
+        window.openShopUI();
+      }
+      return;
+    }
+
     if (btn.code === "KeyE") {
       activeTouchPointers.set(pointerId, {
         id: btn.id,
@@ -2029,9 +2120,73 @@ document.querySelectorAll(".char-btn").forEach((button) => {
   });
 });
 
+let userCollapsedFullscreen = false;
+
+async function forceExpandFullscreen(fromUserGesture = false) {
+  try {
+    if (window.Telegram && window.Telegram.WebApp) {
+      if (typeof window.Telegram.WebApp.expand === "function") {
+        window.Telegram.WebApp.expand();
+      }
+      if (typeof window.Telegram.WebApp.requestFullscreen === "function") {
+        try {
+          window.Telegram.WebApp.requestFullscreen();
+        } catch (_) {}
+      }
+    }
+
+    const container = document.getElementById("game-container");
+    if (container) {
+      container.classList.remove("compact-window");
+    }
+
+    const elem = document.documentElement;
+    const isFs = Boolean(
+      document.fullscreenElement || document.webkitFullscreenElement,
+    );
+    if (!isFs && fromUserGesture) {
+      if (elem.requestFullscreen) {
+        await elem.requestFullscreen().catch(() => {});
+      } else if (elem.webkitRequestFullscreen) {
+        try {
+          elem.webkitRequestFullscreen();
+        } catch (_) {}
+      }
+    }
+
+    if (screen.orientation && screen.orientation.lock) {
+      await screen.orientation.lock("landscape").catch(() => {});
+    }
+    userCollapsedFullscreen = false;
+  } catch (err) {
+    console.log("Fullscreen request info:", err);
+  }
+}
+
+function syncViewportModeOnCollapseOrResize() {
+  const container = document.getElementById("game-container");
+  const isFs = Boolean(
+    document.fullscreenElement || document.webkitFullscreenElement,
+  );
+  if (!isFs && gameStarted) {
+    userCollapsedFullscreen = true;
+    if (container) {
+      container.classList.add("compact-window");
+    }
+  } else if (isFs && container) {
+    container.classList.remove("compact-window");
+  }
+  resizeCanvas();
+}
+
 function init() {
   resizeCanvas();
-  window.addEventListener("resize", resizeCanvas);
+  window.addEventListener("resize", syncViewportModeOnCollapseOrResize);
+  window.addEventListener("orientationchange", () => {
+    setTimeout(syncViewportModeOnCollapseOrResize, 120);
+  });
+  document.addEventListener("fullscreenchange", syncViewportModeOnCollapseOrResize);
+  document.addEventListener("webkitfullscreenchange", syncViewportModeOnCollapseOrResize);
   setupMobileControls();
 
   loadAllAssets(() => {
@@ -2047,23 +2202,15 @@ function init() {
     const loaderText = document.getElementById("loader-text");
     if (loaderFill) loaderFill.style.width = "100%";
     if (loaderText) loaderText.innerText = `СИСТЕМЫ ГОТОВЫ! 100%`;
+
+    forceExpandFullscreen(false);
   });
 
   if (overlay) {
     overlay.addEventListener("click", async () => {
       if (!assetsLoaded) return;
 
-      try {
-        const elem = document.documentElement;
-        if (elem.requestFullscreen) await elem.requestFullscreen();
-        else if (elem.webkitRequestFullscreen) elem.webkitRequestFullscreen();
-
-        if (screen.orientation && screen.orientation.lock) {
-          await screen.orientation.lock("landscape").catch(() => {});
-        }
-      } catch (err) {
-        console.log("Fullscreen block:", err);
-      }
+      await forceExpandFullscreen(true);
 
       overlay.style.display = "none";
       const charSelect = document.getElementById("character-select");
