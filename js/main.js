@@ -64,6 +64,9 @@ window.playerData = playerData;
 
 let canvasBackpackOpen = false;
 let lastBackpackHitboxes = [];
+let lastTouchButtonHitboxes = [];
+const activeTouchPointers = new Map();
+const activeTouchButtonIds = new Set();
 
 function hideExternalBackpackDom() {
   const ids = [
@@ -371,6 +374,7 @@ function getLogicalCanvasCoords(clientX, clientY) {
 function getPlayerFacingDir(p) {
   if (!p) return 1;
   if (typeof p.facingLeft === "boolean") return p.facingLeft ? -1 : 1;
+  if (typeof p.facingRight === "boolean") return p.facingRight ? 1 : -1;
   if (typeof p.facing === "string") {
     if (p.facing.toLowerCase().includes("left")) return -1;
     if (p.facing.toLowerCase().includes("right")) return 1;
@@ -567,7 +571,6 @@ function drawCollectibleClean(targetCtx, item, sheetImg) {
 }
 
 function drawCanvasHudAndBackpack(targetCtx) {
-  const inv = getInventoryState();
   const totalItems = getTotalInventoryCount();
   lastBackpackHitboxes = [];
 
@@ -684,6 +687,209 @@ function drawCanvasHudAndBackpack(targetCtx) {
   }
 
   targetCtx.restore();
+}
+
+function getTouchControlsLayout() {
+  const rect = canvas ? canvas.getBoundingClientRect() : null;
+  const viewW =
+    rect && rect.width ? rect.width : window.innerWidth || LOGICAL_WIDTH;
+  const viewH =
+    rect && rect.height ? rect.height : window.innerHeight || LOGICAL_HEIGHT;
+  const aspect = viewW / Math.max(1, viewH);
+
+  // Земля = 3 тайла (3 * 32 = 96px). Делаем диаметр кнопок не больше высоты земли
+  // и масштабируем компактнее на маленьких и узких экранах.
+  const narrowFactor = aspect < 1.55 ? Math.max(0.74, aspect / 1.55) : 1;
+  const smallScreenFactor = viewW < 720 || viewH < 380 ? 0.84 : 1;
+  const scale = Math.max(
+    0.66,
+    Math.min(1.0, narrowFactor * smallScreenFactor),
+  );
+
+  const moveR = Math.round(25 * scale);
+  const actionR = Math.round(24 * scale);
+  const utilR = Math.round(19 * scale);
+  const bottomMargin = Math.max(14, Math.round(20 * scale));
+  const sideMargin = Math.max(22, Math.round(34 * scale));
+  const moveGap = Math.round(14 * scale);
+  const rightGap = Math.round(10 * scale);
+
+  const buttons = [];
+
+  const leftX = sideMargin + moveR;
+  const rightX = leftX + moveR * 2 + moveGap;
+  const leftCenterY = LOGICAL_HEIGHT - bottomMargin - moveR;
+
+  buttons.push({
+    id: "btn-left",
+    label: "◀",
+    x: leftX,
+    y: leftCenterY,
+    r: moveR,
+    code: "KeyA",
+    key: "a",
+    stroke: "#38bdf8",
+    fill: "rgba(56,189,248,0.24)",
+    textColor: "#ffffff",
+    fontSize: Math.max(13, Math.round(17 * scale)),
+  });
+
+  buttons.push({
+    id: "btn-right",
+    label: "▶",
+    x: rightX,
+    y: leftCenterY,
+    r: moveR,
+    code: "KeyD",
+    key: "d",
+    stroke: "#38bdf8",
+    fill: "rgba(56,189,248,0.24)",
+    textColor: "#ffffff",
+    fontSize: Math.max(13, Math.round(17 * scale)),
+  });
+
+  const rightCenterY = LOGICAL_HEIGHT - bottomMargin - actionR;
+  let cursorX = LOGICAL_WIDTH - sideMargin - actionR;
+
+  buttons.push({
+    id: "btn-jump",
+    label: "▲",
+    x: cursorX,
+    y: rightCenterY,
+    r: actionR,
+    code: "KeyW",
+    key: "w",
+    stroke: "#38bdf8",
+    fill: "rgba(56,189,248,0.28)",
+    textColor: "#ffffff",
+    fontSize: Math.max(13, Math.round(17 * scale)),
+  });
+  cursorX -= actionR + rightGap + actionR;
+
+  buttons.push({
+    id: "btn-attack",
+    label: "👊",
+    x: cursorX,
+    y: rightCenterY,
+    r: actionR,
+    code: "KeyF",
+    key: "f",
+    stroke: "#ec4899",
+    fill: "rgba(236,72,153,0.28)",
+    textColor: "#ffffff",
+    fontSize: Math.max(13, Math.round(16 * scale)),
+  });
+  cursorX -= actionR + rightGap + utilR;
+
+  const turboActive = Boolean(player && player.isTurboActive);
+  buttons.push({
+    id: "btn-turbo",
+    label: "⚡",
+    x: cursorX,
+    y: rightCenterY,
+    r: utilR,
+    code: "KeyE",
+    key: "e",
+    stroke: turboActive ? "#00ffcc" : "#64748b",
+    fill: turboActive ? "rgba(0,255,204,0.22)" : "rgba(15,23,42,0.72)",
+    textColor: turboActive ? "#00ffcc" : "#94a3b8",
+    fontSize: Math.max(11, Math.round(14 * scale)),
+  });
+  cursorX -= utilR + rightGap + utilR;
+
+  buttons.push({
+    id: "btn-repair",
+    label: "🔧",
+    x: cursorX,
+    y: rightCenterY,
+    r: utilR,
+    code: "KeyR",
+    key: "r",
+    stroke: "#fbbf24",
+    fill: "rgba(251,191,36,0.22)",
+    textColor: "#fbbf24",
+    fontSize: Math.max(11, Math.round(14 * scale)),
+  });
+  cursorX -= utilR + rightGap + utilR;
+
+  buttons.push({
+    id: "btn-bag",
+    label: "🎒",
+    x: cursorX,
+    y: rightCenterY,
+    r: utilR,
+    code: "KeyI",
+    key: "i",
+    stroke: "#00ffcc",
+    fill: "rgba(0,255,204,0.20)",
+    textColor: "#00ffcc",
+    fontSize: Math.max(11, Math.round(14 * scale)),
+  });
+
+  return buttons;
+}
+
+function drawCanvasTouchControls(targetCtx) {
+  if (!gameStarted || !targetCtx) return;
+
+  const repairOpen =
+    typeof isRepairPromptOpen === "function" && isRepairPromptOpen();
+  const buttons = getTouchControlsLayout().filter((btn) => {
+    if (!repairOpen) return true;
+    return btn.id === "btn-left" || btn.id === "btn-right";
+  });
+
+  lastTouchButtonHitboxes = buttons;
+  activeTouchButtonIds.clear();
+  activeTouchPointers.forEach((info) => {
+    if (info && info.id) activeTouchButtonIds.add(info.id);
+  });
+
+  targetCtx.save();
+  for (const btn of buttons) {
+    const isPressed = activeTouchButtonIds.has(btn.id);
+    targetCtx.save();
+    targetCtx.translate(btn.x, btn.y);
+    if (isPressed) {
+      targetCtx.scale(0.92, 0.92);
+    }
+
+    targetCtx.beginPath();
+    targetCtx.arc(0, 0, btn.r, 0, Math.PI * 2);
+    targetCtx.fillStyle = isPressed ? "rgba(255,255,255,0.24)" : btn.fill;
+    targetCtx.fill();
+    targetCtx.lineWidth = 2;
+    targetCtx.strokeStyle = btn.stroke;
+    targetCtx.stroke();
+
+    targetCtx.fillStyle = btn.textColor;
+    targetCtx.font = `bold ${btn.fontSize}px monospace`;
+    targetCtx.textAlign = "center";
+    targetCtx.textBaseline = "middle";
+    targetCtx.fillText(btn.label, 0, 1);
+    targetCtx.restore();
+  }
+  targetCtx.restore();
+}
+
+function hitTestTouchButton(lx, ly) {
+  for (const btn of lastTouchButtonHitboxes) {
+    const dist = Math.hypot(lx - btn.x, ly - btn.y);
+    if (dist <= btn.r + 4) {
+      return btn;
+    }
+  }
+  return null;
+}
+
+function releaseAllTouchPointers() {
+  activeTouchPointers.forEach((info) => {
+    if (info && info.code) {
+      dispatchMobileKey(info.code, info.key, false);
+    }
+  });
+  activeTouchPointers.clear();
+  activeTouchButtonIds.clear();
 }
 
 function updatePowerGrid(levelData) {
@@ -1132,6 +1338,7 @@ function onCanvasClick(e) {
   if (now - lastDropTime < 140) return;
 
   const pt = getLogicalCanvasCoords(e.clientX, e.clientY);
+  if (hitTestTouchButton(pt.x, pt.y)) return;
 
   for (const box of lastBackpackHitboxes) {
     if (
@@ -1155,6 +1362,153 @@ function onCanvasClick(e) {
         return;
       }
     }
+  }
+}
+
+let lastHoldActionFTime = 0;
+const HOLD_ACTION_F_INTERVAL_MS = 1000;
+const consumedCollectibles = new WeakSet();
+
+function getCollectiblePos(item) {
+  if (!item) return null;
+  const ix = Number.isFinite(Number(item.x)) ? Number(item.x) : Number(item.worldX);
+  const iy = Number.isFinite(Number(item.y)) ? Number(item.y) : Number(item.worldY);
+  if (!Number.isFinite(ix) || !Number.isFinite(iy)) return null;
+  const w = Number(item.width) || 32;
+  const h = Number(item.height) || 32;
+  return { cx: ix + w / 2, cy: iy + h / 2 };
+}
+
+function applySingleItemPickupToState(item) {
+  const matId = item.materialId || item.id || "";
+  if (item.type === "material" && matId && MATERIAL_KEYS.includes(matId)) {
+    const total = getTotalInventoryCount();
+    if (total >= 10) {
+      console.log("⚠️ Рюкзак полон (10/10)!");
+      return false;
+    }
+    const inv = getInventoryState();
+    inv[matId] = (Number(inv[matId]) || 0) + 1;
+    hideExternalBackpackDom();
+    console.log(`📦 Подобран 1 шт [${matId}]. В рюкзаке: ${inv[matId]}`);
+    return true;
+  }
+
+  if (item.type === "coin" && playerData) {
+    playerData.credits = (Number(playerData.credits) || 0) + 10;
+    return true;
+  }
+
+  if (item.type === "heart" && player) {
+    if (typeof player.hp === "number" && typeof player.maxHp === "number") {
+      player.hp = Math.min(player.maxHp, player.hp + 20);
+    }
+    return true;
+  }
+
+  if (item.type === "plasma" && player) {
+    if (typeof player.energy === "number" && typeof player.maxEnergy === "number") {
+      player.energy = Math.min(player.maxEnergy, player.energy + 25);
+    }
+    return true;
+  }
+
+  return false;
+}
+
+function tryCollectNearestItem(now) {
+  if (
+    !player ||
+    !currentLevelData ||
+    !Array.isArray(currentLevelData.collectibles)
+  ) {
+    return false;
+  }
+
+  if (now - lastPickupTime < 150) {
+    return false;
+  }
+
+  const pCenterX = player.x + (player.width || 32) / 2;
+  const pCenterY = getSafePlayerY(player) + (player.height || 32) / 2;
+
+  let nearestItem = null;
+  let bestDist = 130;
+
+  for (const item of currentLevelData.collectibles) {
+    if (!item || item.isCollected || consumedCollectibles.has(item)) continue;
+    const pos = getCollectiblePos(item);
+    if (!pos) continue;
+    const d = Math.hypot(pCenterX - pos.cx, pCenterY - pos.cy);
+    if (d < bestDist) {
+      bestDist = d;
+      nearestItem = item;
+    }
+  }
+
+  if (!nearestItem) return false;
+
+  // Берём строго один ближайший предмет и сразу блокируем повторные вызовы
+  consumedCollectibles.add(nearestItem);
+  nearestItem.isCollected = true;
+  if (typeof nearestItem.collected === "boolean") {
+    nearestItem.collected = true;
+  }
+
+  currentLevelData.collectibles = currentLevelData.collectibles.filter(
+    (c) => c && c !== nearestItem && !c.isCollected && !consumedCollectibles.has(c),
+  );
+
+  const beforeTotal = getTotalInventoryCount();
+  const beforeCredits = Number(playerData?.credits) || 0;
+  const beforeHp = Number(player?.hp) || 0;
+  const beforeEnergy = Number(player?.energy) || 0;
+
+  if (typeof nearestItem.collect === "function") {
+    try {
+      nearestItem.collect(player);
+    } catch (_) {}
+  }
+
+  // Если предмет не изменил состояние сам (например, в collect() была привязка к старому DOM-рюкзаку),
+  // начисляем ровно 1 единицу напрямую в playerData / player.
+  const afterTotal = getTotalInventoryCount();
+  const afterCredits = Number(playerData?.credits) || 0;
+  const afterHp = Number(player?.hp) || 0;
+  const afterEnergy = Number(player?.energy) || 0;
+
+  const stateChanged =
+    afterTotal !== beforeTotal ||
+    afterCredits !== beforeCredits ||
+    afterHp !== beforeHp ||
+    afterEnergy !== beforeEnergy;
+
+  if (!stateChanged) {
+    applySingleItemPickupToState(nearestItem);
+  }
+
+  lastPickupTime = now;
+  return true;
+}
+
+function triggerHoldActionF() {
+  if (!player || !gameStarted) return;
+  const now = performance.now();
+  if (now - lastHoldActionFTime < HOLD_ACTION_F_INTERVAL_MS) {
+    return;
+  }
+  lastHoldActionFTime = now;
+
+  const picked = tryCollectNearestItem(now);
+  if (!picked && typeof player.triggerAttack === "function") {
+    player.triggerAttack(projectileManager, getWorldObjects());
+  }
+}
+
+function updateHoldActionF() {
+  if (!gameStarted || !player) return;
+  if (keys["KeyF"]) {
+    triggerHoldActionF();
   }
 }
 
@@ -1189,47 +1543,8 @@ function onWindowKeyDown(e) {
   }
 
   if (e.code === "KeyF") {
-    const now = performance.now();
-    if (
-      !e.repeat &&
-      now - lastPickupTime >= 140 &&
-      player &&
-      currentLevelData &&
-      Array.isArray(currentLevelData.collectibles)
-    ) {
-      const pCenterX = player.x + (player.width || 32) / 2;
-      const pCenterY = getSafePlayerY(player) + (player.height || 32) / 2;
-
-      let nearestItem = null;
-      let bestDist = 110;
-
-      for (const item of currentLevelData.collectibles) {
-        if (!item || item.isCollected) continue;
-        const itemCenterX = item.x + (item.width || 32) / 2;
-        const itemCenterY = item.y + (item.height || 32) / 2;
-        const d = Math.hypot(pCenterX - itemCenterX, pCenterY - itemCenterY);
-        if (d < bestDist) {
-          bestDist = d;
-          nearestItem = item;
-        }
-      }
-
-      if (nearestItem && typeof nearestItem.collect === "function") {
-        lastPickupTime = now;
-        const pickedOk = nearestItem.collect(player);
-        if (pickedOk || nearestItem.isCollected) {
-          nearestItem.isCollected = true;
-          currentLevelData.collectibles = currentLevelData.collectibles.filter(
-            (c) => c !== nearestItem && !c.isCollected,
-          );
-        }
-        return;
-      }
-    }
-
-    if (player && typeof player.triggerAttack === "function") {
-      player.triggerAttack(projectileManager, getWorldObjects());
-    }
+    if (e.cancelable) e.preventDefault();
+    triggerHoldActionF();
   }
 
   if (e.code === "KeyE") {
@@ -1309,139 +1624,96 @@ window.addEventListener("keydown", onWindowKeyDown);
 window.addEventListener("keyup", onWindowKeyUp);
 
 function setupMobileControls() {
-  if (document.getElementById("mobile-controls")) return;
+  const oldDomControls = document.getElementById("mobile-controls");
+  if (oldDomControls) {
+    oldDomControls.remove();
+  }
+  if (!canvas) return;
 
-  const mobileContainer = document.createElement("div");
-  mobileContainer.id = "mobile-controls";
-  mobileContainer.innerHTML = `
-      <div style="display:flex; gap:15px; pointer-events:auto;">
-        <div id="btn-left" style="width:65px; height:65px; background:rgba(56,189,248,0.27); border:2px solid #38bdf8; border-radius:50%; color:#fff; font-size:24px; display:flex; align-items:center; justify-content:center; user-select:none; -webkit-user-select:none; touch-action:none;">◀</div>
-        <div id="btn-right" style="width:65px; height:65px; background:rgba(56,189,248,0.27); border:2px solid #38bdf8; border-radius:50%; color:#fff; font-size:24px; display:flex; align-items:center; justify-content:center; user-select:none; -webkit-user-select:none; touch-action:none;">▶</div>
-      </div>
-      <div style="display:flex; gap:12px; pointer-events:auto;">
-        <div id="btn-bag" style="width:55px; height:55px; background:rgba(0,255,204,0.22); border:2px solid #00ffcc; border-radius:50%; color:#00ffcc; font-size:20px; display:flex; align-items:center; justify-content:center; user-select:none; -webkit-user-select:none; touch-action:none;">🎒</div>
-        <div id="btn-repair" style="width:55px; height:55px; background:rgba(251,191,36,0.25); border:2px solid #fbbf24; border-radius:50%; color:#fbbf24; font-size:20px; display:flex; align-items:center; justify-content:center; user-select:none; -webkit-user-select:none; touch-action:none;">🔧</div>
-        <div id="btn-turbo" style="width:55px; height:55px; background:rgba(15,23,42,0.6); border:2px solid #64748b; border-radius:50%; color:#64748b; font-size:20px; display:flex; align-items:center; justify-content:center; user-select:none; -webkit-user-select:none; touch-action:none; opacity:0.85;">⚡</div>
-        <div id="btn-attack" style="width:65px; height:65px; background:rgba(236,72,153,0.3); border:2px solid #ec4899; border-radius:50%; color:#fff; font-size:24px; display:flex; align-items:center; justify-content:center; user-select:none; -webkit-user-select:none; touch-action:none;">👊</div>
-        <div id="btn-jump" style="width:65px; height:65px; background:rgba(56,189,248,0.3); border:2px solid #38bdf8; border-radius:50%; color:#fff; font-size:24px; display:flex; align-items:center; justify-content:center; user-select:none; -webkit-user-select:none; touch-action:none;">▲</div>
-      </div>
-    `;
+  canvas.style.touchAction = "none";
+  canvas.style.userSelect = "none";
+  canvas.style.webkitUserSelect = "none";
 
-  mobileContainer.style.cssText = `
-      position: fixed;
-      bottom: 20px;
-      left: 0;
-      width: 100%;
-      display: flex;
-      justify-content: space-between;
-      padding: 0 20px;
-      box-sizing: border-box;
-      z-index: 99999;
-      pointer-events: none;
-    `;
+  if (window.__prevCanvasPointerDown) {
+    canvas.removeEventListener("pointerdown", window.__prevCanvasPointerDown);
+  }
+  if (window.__prevCanvasPointerMove) {
+    canvas.removeEventListener("pointermove", window.__prevCanvasPointerMove);
+  }
+  if (window.__prevCanvasPointerUp) {
+    window.removeEventListener("pointerup", window.__prevCanvasPointerUp);
+    window.removeEventListener("pointercancel", window.__prevCanvasPointerUp);
+  }
 
-  document.body.appendChild(mobileContainer);
+  const onPointerDown = (e) => {
+    if (!gameStarted) return;
+    if (e.pointerType === "mouse" && e.button !== 0) return;
 
-  const attachPress = (id, onPress, onRelease) => {
-    const el = document.getElementById(id);
-    if (!el) return;
+    const pt = getLogicalCanvasCoords(e.clientX, e.clientY);
+    const btn = hitTestTouchButton(pt.x, pt.y);
+    if (!btn) return;
 
-    let active = false;
-    let activePointerId = null;
-    let activeTouchId = null;
+    if (e.cancelable) e.preventDefault();
+    if (canvas.setPointerCapture) {
+      try {
+        canvas.setPointerCapture(e.pointerId);
+      } catch (_) {}
+    }
 
-    const handleStart = (e) => {
-      if (e && e.cancelable) e.preventDefault();
-      if (active) return;
-      active = true;
-      el.style.transform = "scale(0.92)";
-      if (onPress) onPress();
-    };
+    const prev = activeTouchPointers.get(e.pointerId);
+    if (prev && prev.code !== btn.code) {
+      dispatchMobileKey(prev.code, prev.key, false);
+    }
 
-    const handleEnd = (e) => {
-      if (e && e.cancelable) e.preventDefault();
-      if (!active) return;
-      active = false;
-      el.style.transform = "scale(1)";
-      if (onRelease) onRelease();
-    };
+    activeTouchPointers.set(e.pointerId, {
+      id: btn.id,
+      code: btn.code,
+      key: btn.key,
+    });
+    dispatchMobileKey(btn.code, btn.key, true);
+  };
 
-    if (window.PointerEvent) {
-      el.addEventListener("pointerdown", (e) => {
-        if (active) {
-          if (e.cancelable) e.preventDefault();
-          return;
-        }
+  const onPointerMove = (e) => {
+    if (!activeTouchPointers.has(e.pointerId)) return;
+    const pt = getLogicalCanvasCoords(e.clientX, e.clientY);
+    const btn = hitTestTouchButton(pt.x, pt.y);
+    const current = activeTouchPointers.get(e.pointerId);
 
-        activePointerId = e.pointerId;
-        handleStart(e);
-        if (el.setPointerCapture) {
-          el.setPointerCapture(e.pointerId);
-        }
+    if (!btn) {
+      if (current && current.code) {
+        dispatchMobileKey(current.code, current.key, false);
+      }
+      activeTouchPointers.delete(e.pointerId);
+      return;
+    }
+
+    if (current && current.id !== btn.id) {
+      dispatchMobileKey(current.code, current.key, false);
+      activeTouchPointers.set(e.pointerId, {
+        id: btn.id,
+        code: btn.code,
+        key: btn.key,
       });
-
-      const handlePointerEnd = (e) => {
-        if (e.pointerId !== activePointerId) return;
-        activePointerId = null;
-        handleEnd(e);
-      };
-
-      el.addEventListener("pointerup", handlePointerEnd);
-      el.addEventListener("pointercancel", handlePointerEnd);
-      el.addEventListener("lostpointercapture", handlePointerEnd);
-    } else {
-      el.addEventListener(
-        "touchstart",
-        (e) => {
-          if (active || e.changedTouches.length === 0) {
-            if (e.cancelable) e.preventDefault();
-            return;
-          }
-
-          activeTouchId = e.changedTouches[0].identifier;
-          handleStart(e);
-        },
-        { passive: false },
-      );
-
-      const handleTouchEnd = (e) => {
-        if (
-          !Array.from(e.changedTouches).some(
-            (touch) => touch.identifier === activeTouchId,
-          )
-        )
-          return;
-        activeTouchId = null;
-        handleEnd(e);
-      };
-
-      el.addEventListener("touchend", handleTouchEnd, { passive: false });
-      el.addEventListener("touchcancel", handleTouchEnd, { passive: false });
-      el.addEventListener(
-        "touchmove",
-        (e) => {
-          if (active && e.cancelable) e.preventDefault();
-        },
-        { passive: false },
-      );
+      dispatchMobileKey(btn.code, btn.key, true);
     }
   };
 
-  const bindKey = (id, code, key) => {
-    attachPress(
-      id,
-      () => dispatchMobileKey(code, key, true),
-      () => dispatchMobileKey(code, key, false),
-    );
+  const onPointerEnd = (e) => {
+    const current = activeTouchPointers.get(e.pointerId);
+    if (!current) return;
+    activeTouchPointers.delete(e.pointerId);
+    dispatchMobileKey(current.code, current.key, false);
   };
 
-  bindKey("btn-left", "KeyA", "a");
-  bindKey("btn-right", "KeyD", "d");
-  bindKey("btn-jump", "KeyW", "w");
-  bindKey("btn-attack", "KeyF", "f");
-  bindKey("btn-repair", "KeyR", "r");
-  bindKey("btn-turbo", "KeyE", "e");
-  bindKey("btn-bag", "KeyI", "i");
+  window.__prevCanvasPointerDown = onPointerDown;
+  window.__prevCanvasPointerMove = onPointerMove;
+  window.__prevCanvasPointerUp = onPointerEnd;
+
+  canvas.addEventListener("pointerdown", onPointerDown, { passive: false });
+  canvas.addEventListener("pointermove", onPointerMove, { passive: false });
+  window.addEventListener("pointerup", onPointerEnd, { passive: false });
+  window.addEventListener("pointercancel", onPointerEnd, { passive: false });
+  window.addEventListener("blur", releaseAllTouchPointers);
 }
 
 function startGameWithChar(selectedChar) {
@@ -1742,6 +2014,7 @@ function gameLoop(timestamp) {
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     handleInput();
+    updateHoldActionF();
 
     if (gameStarted && player && currentLevelData) {
       player.prevY = player.y;
@@ -2112,6 +2385,7 @@ function gameLoop(timestamp) {
       ctx.fillText(`SCORE: 1700`, LOGICAL_WIDTH - 180, 43);
 
       drawCanvasHudAndBackpack(ctx);
+      drawCanvasTouchControls(ctx);
 
       ctx.restore();
     }
